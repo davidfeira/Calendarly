@@ -2,14 +2,25 @@
 
 A lightweight, beautiful desktop calendar app built with Tauri and vanilla JavaScript.
 
+## Download
+
+**[📥 Download Latest Release](https://github.com/davidfeira/Calendarly/releases)**
+
+**Windows installers:**
+- `.exe` installer (Recommended, ~1.8 MB)
+- `.msi` installer (Alternative, ~2.8 MB)
+
+After installation, go to Settings (⚙) to enable autostart.
+
 ## Features
 
 - 📅 Monthly calendar view with dynamic sizing
 - 📝 Color-coded note bubbles for each day
 - 🎨 10 customizable bubble colors
-- ⭐ Mark important days
+- ⭐ Mark important days (right-click)
+- 🚀 Autostart on system startup (Windows & Linux)
 - 🌓 Dark/Light mode
-- 🪶 Lightweight (~5MB) - built with Tauri
+- 🪶 Lightweight (~2MB) - built with Tauri
 - 💾 Data persists locally
 
 ## Development
