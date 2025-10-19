@@ -548,6 +548,60 @@ document.getElementById('open-data-folder').addEventListener('click', async () =
     }
 });
 
+// Autostart toggle
+async function updateAutostartButton() {
+    if (!window.__TAURI__ || !window.__TAURI__.autostart) {
+        return;
+    }
+
+    try {
+        const isEnabled = await window.__TAURI__.autostart.isEnabled();
+        const button = document.getElementById('autostart-toggle');
+        button.textContent = isEnabled ? 'Disable Autostart' : 'Enable Autostart';
+    } catch (err) {
+        console.error('Check autostart error:', err);
+    }
+}
+
+document.getElementById('autostart-toggle').addEventListener('click', async () => {
+    if (!window.__TAURI__ || !window.__TAURI__.autostart) {
+        alert('Autostart is only available in the desktop app');
+        return;
+    }
+
+    try {
+        const isEnabled = await window.__TAURI__.autostart.isEnabled();
+
+        if (isEnabled) {
+            await window.__TAURI__.autostart.disable();
+            alert('Autostart disabled');
+        } else {
+            await window.__TAURI__.autostart.enable();
+            alert('Autostart enabled! Calendarly will now start when you log in.');
+        }
+
+        await updateAutostartButton();
+    } catch (err) {
+        console.error('Toggle autostart error:', err);
+        alert('Could not toggle autostart: ' + err.message);
+    }
+});
+
+// Update autostart button when settings view is shown
+const observer = new MutationObserver((mutations) => {
+    mutations.forEach((mutation) => {
+        if (mutation.target.classList.contains('active') &&
+            mutation.target.id === 'settings-view') {
+            updateAutostartButton();
+        }
+    });
+});
+
+const settingsView = document.getElementById('settings-view');
+if (settingsView) {
+    observer.observe(settingsView, { attributes: true, attributeFilter: ['class'] });
+}
+
 // Initialize
 loadData();
 renderCalendar();
