@@ -1,0 +1,84 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Calendarly</title>
+    <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+    <div id="app">
+        <!-- Window Controls Bar -->
+        <div class="titlebar" data-tauri-drag-region>
+            <button class="settings-button" id="settings-btn">⚙</button>
+            <div class="titlebar-spacer"></div>
+            <div class="window-controls">
+                <button class="window-button" id="minimize">−</button>
+                <button class="window-button" id="maximize">□</button>
+                <button class="window-button close" id="close">×</button>
+            </div>
+        </div>
+
+        <!-- Calendar View -->
+        <div id="calendar-view" class="view active">
+            <div class="calendar-header">
+                <div class="header-left">
+                    <button id="prev-month">&lt;</button>
+                    <div class="mini-calendar" id="mini-prev"></div>
+                </div>
+                <h2 id="current-month"></h2>
+                <div class="header-right">
+                    <div class="mini-calendar" id="mini-next"></div>
+                    <button id="next-month">&gt;</button>
+                </div>
+            </div>
+            <div class="calendar-grid" id="calendar-grid">
+                <div class="day-header">Sun</div>
+                <div class="day-header">Mon</div>
+                <div class="day-header">Tue</div>
+                <div class="day-header">Wed</div>
+                <div class="day-header">Thu</div>
+                <div class="day-header">Fri</div>
+                <div class="day-header">Sat</div>
+            </div>
+        </div>
+
+        <!-- Day Editor View -->
+        <div id="editor-view" class="view">
+            <div class="editor-header">
+                <button id="back-to-calendar">&lt; Back</button>
+                <h2 id="editor-date"></h2>
+            </div>
+            <div class="editor-content">
+                <div class="bubble-input-container">
+                    <input type="text" id="bubble-input" placeholder="Add a note and press Enter...">
+                </div>
+                <div id="bubbles-container"></div>
+            </div>
+        </div>
+
+        <!-- Settings View -->
+        <div id="settings-view" class="view">
+            <div class="settings-header">
+                <button id="back-from-settings">&lt; Back</button>
+                <h2>Settings</h2>
+            </div>
+            <div class="settings-content">
+                <div class="setting-item">
+                    <div class="setting-label">Theme</div>
+                    <button id="theme-toggle" class="setting-button">Toggle Dark/Light Mode</button>
+                </div>
+                <div class="setting-item">
+                    <div class="setting-label">Data</div>
+                    <div class="setting-buttons">
+                        <button id="open-data-folder" class="setting-button">Show Data Folder Path</button>
+                        <button id="reset-data" class="setting-button danger">Reset All Data</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="app.js"></script>
+</body>
+</html>

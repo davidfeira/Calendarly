@@ -1,0 +1,17 @@
+# Node
+node_modules/
+npm-debug.log*
+
+# Tauri
+src-tauri/target/
+
+# Build outputs
+dist/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# IDE
+.vscode/
+.idea/
