@@ -97,7 +97,7 @@ function renderCalendar() {
 
     // Add next month's leading days to fill the last row
     const totalCells = calendarGrid.querySelectorAll('.day-cell').length;
-    const remainingCells = (rowsNeeded * 7) - totalCells - 7; // Fill to complete rows minus headers
+    const remainingCells = (rowsNeeded * 7) - totalCells; // Fill to complete rows
     for (let day = 1; day <= remainingCells; day++) {
         const date = new Date(year, month + 1, day);
         const cell = createDayCell(date, true);
@@ -1111,3 +1111,4 @@ function deleteScheduleItem(index) {
 // Initialize
 loadData();
 renderCalendar();
+updateAutostartButton();
