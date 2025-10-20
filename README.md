@@ -16,8 +16,9 @@ After installation, go to Settings (⚙) to enable autostart.
 
 **Build from source:**
 
+#### Debian/Ubuntu
 ```bash
-# Install dependencies (Debian/Ubuntu)
+# Install dependencies
 sudo apt update
 sudo apt install libwebkit2gtk-4.0-dev build-essential curl wget libssl-dev libgtk-3-dev libayatana-appindicator3-dev librsvg2-dev
 
@@ -31,13 +32,69 @@ npm install
 # Build the app
 npm run build
 
-# Install the .deb package (Debian/Ubuntu)
+# Install the .deb package
 sudo dpkg -i src-tauri/target/release/bundle/deb/calendarly_0.1.0_amd64.deb
+```
 
-# Or use the AppImage (works on most distros)
+#### Arch Linux / Manjaro
+```bash
+# Install dependencies
+sudo pacman -S webkit2gtk-4.1 base-devel curl wget openssl gtk3 libappindicator-gtk3 librsvg
+
+# For Hyprland/Wayland users, also install:
+sudo pacman -S xdg-desktop-portal-hyprland xdg-desktop-portal-gtk
+
+# Clone the repo
+git clone https://github.com/davidfeira/Calendarly.git
+cd Calendarly
+
+# Install Node dependencies
+npm install
+
+# Build the app
+npm run build
+
+# Use the AppImage (recommended for Arch)
 chmod +x src-tauri/target/release/bundle/appimage/calendarly_0.1.0_amd64.AppImage
 ./src-tauri/target/release/bundle/appimage/calendarly_0.1.0_amd64.AppImage
 ```
+
+#### Hyprland Users
+If running on Hyprland, ensure these environment variables are set in your Hyprland config (`~/.config/hypr/hyprland.conf`):
+
+```bash
+env = GDK_BACKEND,wayland,x11
+env = QT_QPA_PLATFORM,wayland;xcb
+env = SDL_VIDEODRIVER,wayland
+env = CLUTTER_BACKEND,wayland
+```
+
+#### AppImage Troubleshooting
+
+If you encounter issues building or running the AppImage:
+
+1. **Missing FUSE**: AppImages require FUSE to run
+   ```bash
+   # Arch Linux
+   sudo pacman -S fuse2
+
+   # Debian/Ubuntu
+   sudo apt install fuse libfuse2
+   ```
+
+2. **Wayland compatibility**: For Wayland compositors (Hyprland, Sway, etc.), you may need to run with:
+   ```bash
+   # Force Wayland backend
+   GDK_BACKEND=wayland ./calendarly_0.1.0_amd64.AppImage
+
+   # Or force X11 if Wayland has issues
+   GDK_BACKEND=x11 ./calendarly_0.1.0_amd64.AppImage
+   ```
+
+3. **Permission denied**: Ensure the AppImage is executable
+   ```bash
+   chmod +x src-tauri/target/release/bundle/appimage/calendarly_0.1.0_amd64.AppImage
+   ```
 
 After installation, launch the app and go to Settings (⚙) to enable autostart.
 
