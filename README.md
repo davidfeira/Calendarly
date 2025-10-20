@@ -36,38 +36,6 @@ npm run build
 sudo dpkg -i src-tauri/target/release/bundle/deb/calendarly_0.1.0_amd64.deb
 ```
 
-#### Arch Linux / Manjaro
-```bash
-# Install dependencies
-sudo pacman -S webkit2gtk-4.1 base-devel curl wget openssl gtk3 libappindicator-gtk3 librsvg
-
-# For Hyprland/Wayland users, also install:
-sudo pacman -S xdg-desktop-portal-hyprland xdg-desktop-portal-gtk
-
-# Clone the repo
-git clone https://github.com/davidfeira/Calendarly.git
-cd Calendarly
-
-# Install Node dependencies
-npm install
-
-# Build the app
-npm run build
-
-# Use the AppImage (recommended for Arch)
-chmod +x src-tauri/target/release/bundle/appimage/calendarly_0.1.0_amd64.AppImage
-./src-tauri/target/release/bundle/appimage/calendarly_0.1.0_amd64.AppImage
-```
-
-#### Hyprland Users
-If running on Hyprland, ensure these environment variables are set in your Hyprland config (`~/.config/hypr/hyprland.conf`):
-
-```bash
-env = GDK_BACKEND,wayland,x11
-env = QT_QPA_PLATFORM,wayland;xcb
-env = SDL_VIDEODRIVER,wayland
-env = CLUTTER_BACKEND,wayland
-```
 
 #### AppImage Troubleshooting
 
