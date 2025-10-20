@@ -9,10 +9,11 @@
 <body>
     <div id="app">
         <!-- Window Controls Bar -->
-        <div class="titlebar" data-tauri-drag-region>
+        <div class="titlebar" data-tauri-drag-region id="titlebar">
             <button class="settings-button" id="settings-btn">⚙</button>
+            <button class="settings-button" id="today-btn" title="Back to Today">⌂</button>
             <div class="titlebar-spacer"></div>
-            <div class="window-controls">
+            <div class="window-controls" id="window-controls">
                 <button class="window-button" id="minimize">−</button>
                 <button class="window-button" id="maximize">□</button>
                 <button class="window-button close" id="close">×</button>
@@ -76,10 +77,33 @@
             </div>
             <div class="settings-content">
                 <div class="setting-item">
+                    <div class="setting-label">Cloud Sync</div>
+                    <div id="sync-status" class="sync-status">Not signed in</div>
+                    <div id="sync-auth-form" class="sync-auth-form">
+                        <input type="text" id="sync-username" placeholder="Username" autocomplete="off">
+                        <input type="password" id="sync-password" placeholder="Password" autocomplete="off">
+                        <div class="setting-buttons">
+                            <button id="sync-login-btn" class="setting-button">Sign In</button>
+                            <button id="sync-register-btn" class="setting-button">Create Account</button>
+                        </div>
+                    </div>
+                    <div id="sync-logged-in" class="sync-logged-in" style="display: none;">
+                        <div class="setting-buttons">
+                            <button id="sync-push-btn" class="setting-button">Push to Cloud</button>
+                            <button id="sync-pull-btn" class="setting-button">Pull from Cloud</button>
+                            <button id="sync-logout-btn" class="setting-button danger">Sign Out</button>
+                        </div>
+                    </div>
+                </div>
+                <div class="setting-item">
                     <div class="setting-label">Theme</div>
                     <button id="theme-toggle" class="setting-button">Toggle Dark/Light Mode</button>
                 </div>
                 <div class="setting-item">
+                    <div class="setting-label">Time Format</div>
+                    <button id="time-format-toggle" class="setting-button">Use 12-Hour Time</button>
+                </div>
+                <div class="setting-item" id="autostart-setting">
                     <div class="setting-label">Startup</div>
                     <button id="autostart-toggle" class="setting-button">Enable Autostart</button>
                 </div>
@@ -134,6 +158,8 @@
         </div>
     </div>
 
+    <script src="https://cdn.jsdelivr.net/npm/gun/gun.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/gun/sea.js"></script>
     <script src="app.js"></script>
 </body>
 </html>

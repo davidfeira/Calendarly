@@ -4,9 +4,235 @@ let importantDays = new Set(); // Store dates marked as important
 let dailySchedule = {}; // Store schedule items per day
 let currentDate = new Date();
 let selectedDate = null;
+let use24HourTime = false; // Time format preference (false = 12-hour, true = 24-hour)
 
 // Available colors
 const COLORS = ['blue', 'red', 'green', 'yellow', 'purple', 'orange', 'pink', 'teal', 'gray', 'brown'];
+
+// ===== GUN.JS CLOUD SYNC =====
+let gun = null;
+let currentUser = null;
+let syncEnabled = false;
+
+// Initialize Gun.js
+function initGun() {
+    gun = Gun([
+        'https://gun-manhattan.herokuapp.com/gun',
+        'https://gun-us.herokuapp.com/gun'
+    ]);
+
+    // Check if user was previously logged in
+    const savedUsername = localStorage.getItem('gun-username');
+    if (savedUsername) {
+        updateSyncStatus(`Previously: ${savedUsername} (sign in again to sync)`);
+    }
+}
+
+// Update sync status UI
+function updateSyncStatus(message, className = '') {
+    const statusEl = document.getElementById('sync-status');
+    if (statusEl) {
+        statusEl.textContent = message;
+        statusEl.className = 'sync-status ' + className;
+    }
+}
+
+// Show/hide sync UI sections
+function updateSyncUI(loggedIn) {
+    const authForm = document.getElementById('sync-auth-form');
+    const loggedInSection = document.getElementById('sync-logged-in');
+
+    if (loggedIn) {
+        authForm.style.display = 'none';
+        loggedInSection.style.display = 'flex';
+    } else {
+        authForm.style.display = 'flex';
+        loggedInSection.style.display = 'none';
+    }
+}
+
+// Register new account
+async function registerAccount() {
+    const username = document.getElementById('sync-username').value.trim();
+    const password = document.getElementById('sync-password').value;
+
+    if (!username || !password) {
+        alert('Please enter both username and password');
+        return;
+    }
+
+    if (password.length < 6) {
+        alert('Password must be at least 6 characters');
+        return;
+    }
+
+    updateSyncStatus('Creating account...', 'syncing');
+
+    currentUser = gun.user();
+    currentUser.create(username, password, (ack) => {
+        if (ack.err) {
+            updateSyncStatus('Error: ' + ack.err);
+            alert('Registration failed: ' + ack.err);
+        } else {
+            // Auto-login after registration
+            loginToSync();
+        }
+    });
+}
+
+// Login to sync account
+function loginToSync() {
+    const username = document.getElementById('sync-username').value.trim();
+    const password = document.getElementById('sync-password').value;
+
+    if (!username || !password) {
+        alert('Please enter both username and password');
+        return;
+    }
+
+    updateSyncStatus('Signing in...', 'syncing');
+
+    currentUser = gun.user();
+    currentUser.auth(username, password, (ack) => {
+        if (ack.err) {
+            updateSyncStatus('Sign in failed: ' + ack.err);
+            alert('Login failed: ' + ack.err);
+        } else {
+            localStorage.setItem('gun-username', username);
+            syncEnabled = true;
+            updateSyncStatus(`Signed in as ${username}`, 'synced');
+            updateSyncUI(true);
+
+            // Clear password field
+            document.getElementById('sync-password').value = '';
+
+            // Enable auto-sync
+            enableAutoSync();
+        }
+    });
+}
+
+// Logout from sync
+function logoutFromSync() {
+    if (currentUser) {
+        currentUser.leave();
+    }
+    currentUser = null;
+    syncEnabled = false;
+    localStorage.removeItem('gun-username');
+    updateSyncStatus('Not signed in');
+    updateSyncUI(false);
+
+    // Clear input fields
+    document.getElementById('sync-username').value = '';
+    document.getElementById('sync-password').value = '';
+}
+
+// Push data to cloud
+function pushToCloud() {
+    if (!currentUser || !syncEnabled) {
+        alert('Please sign in first');
+        return;
+    }
+
+    updateSyncStatus('Pushing to cloud...', 'syncing');
+
+    const data = {
+        notes: calendarData,
+        important: [...importantDays],
+        schedule: dailySchedule,
+        theme: document.body.classList.contains('light-mode') ? 'light' : 'dark',
+        use24HourTime: use24HourTime,
+        lastUpdate: Date.now()
+    };
+
+    currentUser.get('calendar').put(data, (ack) => {
+        if (ack.err) {
+            updateSyncStatus('Push failed: ' + ack.err);
+            alert('Failed to push to cloud: ' + ack.err);
+        } else {
+            const username = localStorage.getItem('gun-username');
+            updateSyncStatus(`Synced as ${username} (${new Date().toLocaleTimeString()})`, 'synced');
+        }
+    });
+}
+
+// Pull data from cloud
+function pullFromCloud() {
+    if (!currentUser || !syncEnabled) {
+        alert('Please sign in first');
+        return;
+    }
+
+    updateSyncStatus('Pulling from cloud...', 'syncing');
+
+    currentUser.get('calendar').once((data) => {
+        if (!data || !data.notes) {
+            updateSyncStatus('No cloud data found');
+            alert('No data found in cloud. Try pushing your local data first.');
+            return;
+        }
+
+        // Update local data
+        calendarData = data.notes || {};
+        importantDays = new Set(data.important || []);
+        dailySchedule = data.schedule || {};
+        use24HourTime = data.use24HourTime || false;
+
+        // Apply theme
+        if (data.theme === 'light') {
+            document.body.classList.add('light-mode');
+        } else {
+            document.body.classList.remove('light-mode');
+        }
+
+        // Update time format button
+        updateTimeFormatButton();
+
+        // Save to localStorage
+        saveData();
+
+        // Refresh UI
+        renderCalendar();
+        if (selectedDate) {
+            renderEditorBubbles();
+            renderScheduleItems();
+        }
+
+        const username = localStorage.getItem('gun-username');
+        updateSyncStatus(`Synced as ${username} (${new Date().toLocaleTimeString()})`, 'synced');
+    });
+}
+
+// Enable automatic real-time sync
+function enableAutoSync() {
+    if (!currentUser || !syncEnabled) return;
+
+    // Listen for changes from other devices
+    currentUser.get('calendar').on((data, key) => {
+        if (!data || !data.notes) return;
+
+        // Only update if data is newer than local (avoid sync loops)
+        const localLastUpdate = localStorage.getItem('last-local-update') || 0;
+        if (data.lastUpdate && data.lastUpdate > localLastUpdate) {
+            calendarData = data.notes || {};
+            importantDays = new Set(data.important || []);
+            dailySchedule = data.schedule || {};
+            use24HourTime = data.use24HourTime || false;
+
+            updateTimeFormatButton();
+            saveData();
+            renderCalendar();
+            if (selectedDate) {
+                renderEditorBubbles();
+                renderScheduleItems();
+            }
+
+            const username = localStorage.getItem('gun-username');
+            updateSyncStatus(`Auto-synced as ${username} (${new Date().toLocaleTimeString()})`, 'synced');
+        }
+    });
+}
 
 // Load data from localStorage
 function loadData() {
@@ -16,6 +242,7 @@ function loadData() {
         calendarData = data.notes || {};
         importantDays = new Set(data.important || []);
         dailySchedule = data.schedule || {};
+        use24HourTime = data.use24HourTime || false;
 
         // Load theme
         if (data.theme === 'light') {
@@ -30,9 +257,20 @@ function saveData() {
         notes: calendarData,
         important: [...importantDays],
         schedule: dailySchedule,
-        theme: document.body.classList.contains('light-mode') ? 'light' : 'dark'
+        theme: document.body.classList.contains('light-mode') ? 'light' : 'dark',
+        use24HourTime: use24HourTime
     };
     localStorage.setItem('calendarly-data', JSON.stringify(data));
+    localStorage.setItem('last-local-update', Date.now().toString());
+
+    // Auto-sync to cloud if enabled
+    if (syncEnabled && currentUser) {
+        const cloudData = {
+            ...data,
+            lastUpdate: Date.now()
+        };
+        currentUser.get('calendar').put(cloudData);
+    }
 }
 
 // Format date as YYYY-MM-DD
@@ -41,6 +279,60 @@ function formatDate(date) {
     const month = String(date.getMonth() + 1).padStart(2, '0');
     const day = String(date.getDate()).padStart(2, '0');
     return `${year}-${month}-${day}`;
+}
+
+// Format time based on user preference (24-hour or 12-hour)
+// showAMPM parameter controls whether to show AM/PM (for forms) or just time (for timeline)
+function formatTime(timeString, showAMPM = false) {
+    const [hours, minutes] = timeString.split(':').map(Number);
+
+    if (use24HourTime) {
+        return `${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}`;
+    } else {
+        const hour12 = hours === 0 ? 12 : hours > 12 ? hours - 12 : hours;
+        const formattedTime = `${hour12}:${String(minutes).padStart(2, '0')}`;
+
+        if (showAMPM) {
+            const ampm = hours >= 12 ? 'PM' : 'AM';
+            return `${formattedTime} ${ampm}`;
+        }
+        return formattedTime;
+    }
+}
+
+// Parse time input to 24-hour format (handles both 12-hour and 24-hour input)
+function parseTimeInput(input) {
+    if (!input) return null;
+
+    // Remove extra spaces
+    input = input.trim();
+
+    // Check if it has AM/PM
+    const ampmMatch = input.match(/(\d{1,2}):?(\d{2})?\s*(am|pm)/i);
+    if (ampmMatch) {
+        let hours = parseInt(ampmMatch[1]);
+        const minutes = ampmMatch[2] ? parseInt(ampmMatch[2]) : 0;
+        const isPM = ampmMatch[3].toLowerCase() === 'pm';
+
+        // Convert to 24-hour
+        if (isPM && hours !== 12) hours += 12;
+        if (!isPM && hours === 12) hours = 0;
+
+        return `${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}`;
+    }
+
+    // Try to parse as 24-hour format
+    const timeMatch = input.match(/(\d{1,2}):?(\d{2})?/);
+    if (timeMatch) {
+        const hours = parseInt(timeMatch[1]);
+        const minutes = timeMatch[2] ? parseInt(timeMatch[2]) : 0;
+
+        if (hours >= 0 && hours <= 23 && minutes >= 0 && minutes <= 59) {
+            return `${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}`;
+        }
+    }
+
+    return null;
 }
 
 // Get month name
@@ -262,7 +554,7 @@ function createDayCell(date, isOtherMonth) {
     if (dailySchedule[dateKey] && dailySchedule[dateKey].length > 0) {
         const scheduleIcon = document.createElement('span');
         scheduleIcon.className = 'schedule-indicator';
-        scheduleIcon.innerHTML = '📅';
+        scheduleIcon.innerHTML = '◈';
         dayNumber.appendChild(scheduleIcon);
     }
 
@@ -561,7 +853,17 @@ if (window.__TAURI__) {
         });
     }
 } else {
-    console.warn('Tauri API not available');
+    console.warn('Tauri API not available - running in browser mode');
+    // Hide window controls in web mode
+    const windowControls = document.getElementById('window-controls');
+    if (windowControls) {
+        windowControls.style.display = 'none';
+    }
+    // Hide autostart setting in web mode
+    const autostartSetting = document.getElementById('autostart-setting');
+    if (autostartSetting) {
+        autostartSetting.style.display = 'none';
+    }
 }
 
 // Settings navigation
@@ -578,6 +880,30 @@ if (settingsBtn) {
     });
 }
 
+// Today button - return to current month and calendar view from anywhere
+const todayBtn = document.getElementById('today-btn');
+if (todayBtn) {
+    todayBtn.addEventListener('click', (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+
+        // Reset to today's date
+        currentDate = new Date();
+
+        // Hide all views
+        document.getElementById('calendar-view').classList.remove('active');
+        document.getElementById('editor-view').classList.remove('active');
+        document.getElementById('settings-view').classList.remove('active');
+        document.getElementById('import-export-view').classList.remove('active');
+
+        // Show calendar view
+        document.getElementById('calendar-view').classList.add('active');
+
+        // Render calendar
+        renderCalendar();
+    });
+}
+
 document.getElementById('back-from-settings').addEventListener('click', () => {
     document.getElementById('settings-view').classList.remove('active');
     document.getElementById('calendar-view').classList.add('active');
@@ -587,6 +913,25 @@ document.getElementById('back-from-settings').addEventListener('click', () => {
 document.getElementById('theme-toggle').addEventListener('click', () => {
     document.body.classList.toggle('light-mode');
     saveData();
+});
+
+// Time format toggle
+function updateTimeFormatButton() {
+    const button = document.getElementById('time-format-toggle');
+    if (button) {
+        button.textContent = use24HourTime ? 'Use 12-Hour Time' : 'Use 24-Hour Time';
+    }
+}
+
+document.getElementById('time-format-toggle').addEventListener('click', () => {
+    use24HourTime = !use24HourTime;
+    updateTimeFormatButton();
+    saveData();
+
+    // Re-render timeline if we're currently viewing it
+    if (selectedDate) {
+        renderTimeline();
+    }
 });
 
 // Reset data
@@ -810,7 +1155,7 @@ function renderTimeline() {
             if (minutes === 0) {
                 const label = document.createElement('div');
                 label.className = 'time-label';
-                label.textContent = timeString;
+                label.textContent = formatTime(timeString);
                 slot.appendChild(label);
             }
 
@@ -996,15 +1341,18 @@ function showScheduleForm(clickedTime, hour, prefillText = '', prefillColor = 'b
 
     const startInput = document.createElement('input');
     startInput.type = 'text';
-    startInput.value = clickedTime;
-    startInput.placeholder = 'HH:MM';
+    startInput.value = clickedTime ? formatTime(clickedTime, true) : ''; // Show AM/PM in form, or blank if no time
+    startInput.placeholder = 'Start time';
     startInput.id = 'schedule-start-input';
     startInput.autocomplete = 'off';
+    if (clickedTime) {
+        startInput.dataset.time24h = clickedTime; // Store 24h format internally
+    }
     timeRow.appendChild(startInput);
 
     const endInput = document.createElement('input');
     endInput.type = 'text';
-    endInput.placeholder = 'End time (HH:MM)';
+    endInput.placeholder = 'End time';
     endInput.id = 'schedule-end-input';
     endInput.autocomplete = 'off';
     timeRow.appendChild(endInput);
@@ -1094,14 +1442,14 @@ function showScheduleForm(clickedTime, hour, prefillText = '', prefillColor = 'b
     addBtn.textContent = 'Add';
     addBtn.addEventListener('click', () => {
         const text = textInput.value.trim();
-        const start = startInput.value;
-        const endParsed = endInput.dataset.parsed24h || findClosestTime(start, endInput.value, flipped);
+        const startParsed = parseTimeInput(startInput.value);
+        const endParsed = endInput.dataset.parsed24h || findClosestTime(startParsed || clickedTime, endInput.value, flipped);
 
-        if (text && start && endParsed) {
-            addScheduleItem(text, start, endParsed, selectedColor);
+        if (text && startParsed && endParsed) {
+            addScheduleItem(text, startParsed, endParsed, selectedColor);
             form.remove();
-        } else if (text && start && endInput.value) {
-            alert('Invalid time format. Use HH:MM (e.g., 9:30, 14:00)');
+        } else if (text && (startInput.value || endInput.value)) {
+            alert('Invalid time format. Use ' + (use24HourTime ? 'HH:MM (e.g., 9:30, 14:00)' : 'h:MM AM/PM (e.g., 9:30 AM, 2:00 PM)'));
         }
     });
     buttons.appendChild(addBtn);
@@ -1169,22 +1517,20 @@ function showScheduleFormForEdit(clickedTime, hour, prefillText, prefillColor, p
 
     const startInput = document.createElement('input');
     startInput.type = 'text';
-    startInput.value = clickedTime;
-    startInput.placeholder = 'HH:MM';
+    startInput.value = formatTime(clickedTime, true); // Show AM/PM in form
+    startInput.placeholder = 'Start time';
     startInput.id = 'schedule-start-input';
     startInput.autocomplete = 'off';
+    startInput.dataset.time24h = clickedTime; // Store 24h format internally
     timeRow.appendChild(startInput);
 
     const endInput = document.createElement('input');
     endInput.type = 'text';
-    endInput.placeholder = 'End time (HH:MM)';
+    endInput.placeholder = 'End time';
     endInput.id = 'schedule-end-input';
     endInput.autocomplete = 'off';
-    // Convert end time to 12h format for display
-    const [endH, endM] = prefillEndTime.split(':').map(Number);
-    const endHour12 = endH === 0 ? 12 : endH > 12 ? endH - 12 : endH;
-    const endAmpm = endH >= 12 ? 'PM' : 'AM';
-    endInput.value = `${endHour12}:${String(endM).padStart(2, '0')} ${endAmpm}`;
+    // Display end time in selected format with AM/PM
+    endInput.value = formatTime(prefillEndTime, true);
     endInput.dataset.parsed24h = prefillEndTime;
     timeRow.appendChild(endInput);
 
@@ -1266,14 +1612,14 @@ function showScheduleFormForEdit(clickedTime, hour, prefillText, prefillColor, p
     updateBtn.textContent = 'Update';
     updateBtn.addEventListener('click', () => {
         const text = textInput.value.trim();
-        const start = startInput.value;
-        const endParsed = endInput.dataset.parsed24h || findClosestTime(start, endInput.value, flipped);
+        const startParsed = parseTimeInput(startInput.value);
+        const endParsed = endInput.dataset.parsed24h || findClosestTime(startParsed || clickedTime, endInput.value, flipped);
 
-        if (text && start && endParsed) {
-            updateScheduleItem(itemIndex, text, start, endParsed, selectedColor);
+        if (text && startParsed && endParsed) {
+            updateScheduleItem(itemIndex, text, startParsed, endParsed, selectedColor);
             form.remove();
-        } else if (text && start && endInput.value) {
-            alert('Invalid time format. Use HH:MM (e.g., 9:30, 14:00)');
+        } else if (text && (startInput.value || endInput.value)) {
+            alert('Invalid time format. Use ' + (use24HourTime ? 'HH:MM (e.g., 9:30, 14:00)' : 'h:MM AM/PM (e.g., 9:30 AM, 2:00 PM)'));
         }
     });
     buttons.appendChild(updateBtn);
@@ -1358,7 +1704,16 @@ function deleteScheduleItem(index) {
     }
 }
 
+// Sync button event listeners
+document.getElementById('sync-register-btn').addEventListener('click', registerAccount);
+document.getElementById('sync-login-btn').addEventListener('click', loginToSync);
+document.getElementById('sync-logout-btn').addEventListener('click', logoutFromSync);
+document.getElementById('sync-push-btn').addEventListener('click', pushToCloud);
+document.getElementById('sync-pull-btn').addEventListener('click', pullFromCloud);
+
 // Initialize
+initGun();
 loadData();
 renderCalendar();
 updateAutostartButton();
+updateTimeFormatButton();
