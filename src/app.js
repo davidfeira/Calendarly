@@ -399,9 +399,20 @@ function renderCalendar() {
     // After rendering, fill in bubbles based on available space
     requestAnimationFrame(() => fillBubbles());
 
-    // Render mini calendars
-    renderMiniCalendar('mini-prev', new Date(year, month - 1, 1));
-    renderMiniCalendar('mini-next', new Date(year, month + 1, 1));
+    // Render mini calendars (both desktop and mobile versions)
+    const prevMonthDate = new Date(year, month - 1, 1);
+    const nextMonthDate = new Date(year, month + 1, 1);
+
+    renderMiniCalendar('mini-prev-desktop', prevMonthDate);
+    renderMiniCalendar('mini-next-desktop', nextMonthDate);
+    renderMiniCalendar('mini-prev', prevMonthDate);
+    renderMiniCalendar('mini-next', nextMonthDate);
+
+    // Update mini calendar titles
+    const prevTitle = document.getElementById('mini-prev-title');
+    const nextTitle = document.getElementById('mini-next-title');
+    if (prevTitle) prevTitle.textContent = getMonthName(prevMonthDate);
+    if (nextTitle) nextTitle.textContent = getMonthName(nextMonthDate);
 }
 
 // Render mini calendar
@@ -767,6 +778,13 @@ function nextDay() {
 // Event listeners
 document.getElementById('prev-month').addEventListener('click', prevMonth);
 document.getElementById('next-month').addEventListener('click', nextMonth);
+
+// Mobile navigation buttons
+const prevMonthMobile = document.getElementById('prev-month-mobile');
+const nextMonthMobile = document.getElementById('next-month-mobile');
+if (prevMonthMobile) prevMonthMobile.addEventListener('click', prevMonth);
+if (nextMonthMobile) nextMonthMobile.addEventListener('click', nextMonth);
+
 document.getElementById('back-to-calendar').addEventListener('click', backToCalendar);
 document.getElementById('prev-day').addEventListener('click', prevDay);
 document.getElementById('next-day').addEventListener('click', nextDay);
@@ -875,7 +893,13 @@ if (settingsBtn) {
         console.log('Settings clicked!');
         e.preventDefault();
         e.stopPropagation();
+
+        // Hide all views first
         document.getElementById('calendar-view').classList.remove('active');
+        document.getElementById('editor-view').classList.remove('active');
+        document.getElementById('import-export-view').classList.remove('active');
+
+        // Show settings view
         document.getElementById('settings-view').classList.add('active');
     });
 }

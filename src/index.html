@@ -24,15 +24,28 @@
         <div id="calendar-view" class="view active">
             <div class="calendar-header">
                 <div class="header-left">
-                    <button id="prev-month">&lt;</button>
-                    <div class="mini-calendar" id="mini-prev"></div>
+                    <button id="prev-month" class="mobile-hidden">&lt;</button>
+                    <div class="mini-calendar desktop-only" id="mini-prev-desktop"></div>
                 </div>
                 <h2 id="current-month"></h2>
                 <div class="header-right">
-                    <div class="mini-calendar" id="mini-next"></div>
-                    <button id="next-month">&gt;</button>
+                    <div class="mini-calendar desktop-only" id="mini-next-desktop"></div>
+                    <button id="next-month" class="mobile-hidden">&gt;</button>
                 </div>
             </div>
+
+            <!-- Mini calendar above (previous month) - Mobile only -->
+            <div class="mini-calendar-container mobile-only" id="mini-prev-container">
+                <div class="mini-calendar-nav">
+                    <button id="prev-month-mobile" class="nav-btn">&lt; Previous</button>
+                </div>
+                <div class="mini-calendar-header">
+                    <h3 id="mini-prev-title"></h3>
+                </div>
+                <div class="mini-calendar" id="mini-prev"></div>
+            </div>
+
+            <!-- Main Calendar -->
             <div class="calendar-grid" id="calendar-grid">
                 <div class="day-header">Sun</div>
                 <div class="day-header">Mon</div>
@@ -41,6 +54,17 @@
                 <div class="day-header">Thu</div>
                 <div class="day-header">Fri</div>
                 <div class="day-header">Sat</div>
+            </div>
+
+            <!-- Mini calendar below (next month) - Mobile only -->
+            <div class="mini-calendar-container mobile-only" id="mini-next-container">
+                <div class="mini-calendar-header">
+                    <h3 id="mini-next-title"></h3>
+                </div>
+                <div class="mini-calendar" id="mini-next"></div>
+                <div class="mini-calendar-nav">
+                    <button id="next-month-mobile" class="nav-btn">Next &gt;</button>
+                </div>
             </div>
         </div>
 
