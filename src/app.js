@@ -190,31 +190,58 @@ function fillBubbles() {
         if (!preview.dataset.bubbles) return;
 
         const bubbles = JSON.parse(preview.dataset.bubbles);
-        const availableHeight = preview.clientHeight;
-        const bubbleHeight = 23; // Approximate height of a bubble (11px font + 8px padding + 4px gap)
-        const maxBubbles = Math.floor(availableHeight / bubbleHeight);
+        const dayCell = preview.closest('.day-cell');
 
         // Clear any existing bubbles
         preview.innerHTML = '';
 
-        // Determine how many bubbles to show (leave room for "more" indicator if needed)
-        const bubblestoShow = bubbles.length > maxBubbles ? maxBubbles - 1 : Math.min(bubbles.length, maxBubbles);
+        // Remove any existing size classes
+        dayCell.classList.remove('size-large', 'size-medium', 'size-small', 'size-tiny');
 
-        // Add bubbles
-        bubbles.slice(0, bubblestoShow).forEach(item => {
+        // Try sizes from largest to smallest until everything fits
+        const sizes = ['size-large', 'size-medium', 'size-small', 'size-tiny'];
+        let fittingSize = 'size-tiny'; // Default to smallest
+
+        for (const sizeClass of sizes) {
+            dayCell.classList.add(sizeClass);
+
+            // Render bubbles with this size
+            preview.innerHTML = '';
+            bubbles.forEach(item => {
+                const bubble = document.createElement('div');
+                bubble.className = `note-bubble bubble-${item.color}`;
+                bubble.textContent = item.text;
+                preview.appendChild(bubble);
+            });
+
+            // Check if content fits without overflow
+            // Give it a frame to render
+            const previewHeight = preview.scrollHeight;
+            const availableHeight = preview.clientHeight;
+
+            // If content fits (with a small tolerance), use this size
+            if (previewHeight <= availableHeight + 2) {
+                fittingSize = sizeClass;
+                break;
+            }
+
+            // Remove this size class to try the next smaller one
+            dayCell.classList.remove(sizeClass);
+        }
+
+        // Apply the fitting size (or tiny if nothing fit)
+        if (!dayCell.classList.contains(fittingSize)) {
+            dayCell.classList.add(fittingSize);
+        }
+
+        // Final render with the chosen size
+        preview.innerHTML = '';
+        bubbles.forEach(item => {
             const bubble = document.createElement('div');
             bubble.className = `note-bubble bubble-${item.color}`;
             bubble.textContent = item.text;
             preview.appendChild(bubble);
         });
-
-        // Add "more" indicator if needed
-        if (bubbles.length > bubblestoShow) {
-            const moreBubble = document.createElement('div');
-            moreBubble.className = 'note-bubble more';
-            moreBubble.textContent = `+${bubbles.length - bubblestoShow} more`;
-            preview.appendChild(moreBubble);
-        }
     });
 }
 

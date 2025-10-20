@@ -122,7 +122,7 @@ body {
     display: none;
     flex-direction: column;
     height: 100%;
-    padding: 20px;
+    padding: 16px;
 }
 
 .view.active {
@@ -134,8 +134,8 @@ body {
     display: flex;
     justify-content: space-between;
     align-items: center;
-    margin-bottom: 24px;
-    padding: 16px 20px;
+    margin-bottom: 16px;
+    padding: 12px 16px;
     position: relative;
 }
 
@@ -155,7 +155,7 @@ body {
 }
 
 .calendar-header h2 {
-    font-size: 28px;
+    font-size: 20px;
     font-weight: 400;
     color: var(--text-primary);
     letter-spacing: -0.03em;
@@ -218,7 +218,7 @@ body {
     display: grid;
     grid-template-columns: repeat(7, 1fr);
     grid-template-rows: auto repeat(6, 1fr);
-    gap: 8px;
+    gap: 4px;
     flex: 1;
     min-height: 0;
 }
@@ -226,8 +226,8 @@ body {
 .day-header {
     text-align: center;
     font-weight: 500;
-    font-size: 11px;
-    padding: 8px;
+    font-size: 8px;
+    padding: 4px;
     background: var(--bg-tertiary);
     color: var(--text-muted);
     border-radius: 4px;
@@ -239,7 +239,7 @@ body {
     background: var(--bg-secondary);
     border: 1px solid var(--border-color);
     border-radius: 4px;
-    padding: 10px;
+    padding: 4px;
     cursor: pointer;
     transition: all 0.15s ease;
     display: flex;
@@ -265,39 +265,71 @@ body {
 
 .day-number {
     font-weight: 500;
-    font-size: 13px;
-    margin-bottom: 6px;
+    font-size: 9px;
+    margin-bottom: 2px;
     color: var(--text-secondary);
     display: flex;
     align-items: center;
-    gap: 4px;
+    gap: 2px;
+    flex-shrink: 0;
 }
 
 .schedule-indicator {
-    font-size: 10px;
+    font-size: 7px;
     opacity: 0.6;
     line-height: 1;
 }
 
 .day-preview {
     display: flex;
-    flex-direction: column;
-    gap: 4px;
+    flex-direction: row;
+    flex-wrap: wrap;
+    gap: 2px;
     flex: 1;
     overflow: hidden;
+    align-content: flex-start;
+    min-height: 0;
 }
 
 .note-bubble {
     background: var(--bubble-color);
     color: var(--bubble-text-color);
-    padding: 4px 8px;
-    border-radius: 4px;
-    font-size: 11px;
+    padding: 2px 4px;
+    border-radius: 2px;
+    font-size: 7px;
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
-    flex-shrink: 0;
+    flex-shrink: 1;
     border: 1px solid rgba(255, 255, 255, 0.05);
+    width: fit-content;
+    max-width: 100%;
+    line-height: 1.2;
+}
+
+/* Dynamic font size classes for bubbles */
+.day-cell.size-large .note-bubble {
+    font-size: 11px;
+    padding: 4px 8px;
+    border-radius: 4px;
+}
+
+.day-cell.size-medium .note-bubble {
+    font-size: 9px;
+    padding: 3px 6px;
+    border-radius: 3px;
+}
+
+.day-cell.size-small .note-bubble {
+    font-size: 7px;
+    padding: 2px 4px;
+    border-radius: 2px;
+}
+
+.day-cell.size-tiny .note-bubble {
+    font-size: 6px;
+    padding: 1px 3px;
+    border-radius: 2px;
 }
 
 .note-bubble.more {
