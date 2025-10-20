@@ -1,6 +1,7 @@
 // Simple calendar data storage
 let calendarData = {};
 let importantDays = new Set(); // Store dates marked as important
+let dailySchedule = {}; // Store schedule items per day
 let currentDate = new Date();
 let selectedDate = null;
 
@@ -11,19 +12,27 @@ const COLORS = ['blue', 'red', 'green', 'yellow', 'purple', 'orange', 'pink', 't
 function loadData() {
     const stored = localStorage.getItem('calendarly-data');
     if (stored) {
-        calendarData = JSON.parse(stored);
-    }
+        const data = JSON.parse(stored);
+        calendarData = data.notes || {};
+        importantDays = new Set(data.important || []);
+        dailySchedule = data.schedule || {};
 
-    const storedImportant = localStorage.getItem('calendarly-important');
-    if (storedImportant) {
-        importantDays = new Set(JSON.parse(storedImportant));
+        // Load theme
+        if (data.theme === 'light') {
+            document.body.classList.add('light-mode');
+        }
     }
 }
 
 // Save data to localStorage
 function saveData() {
-    localStorage.setItem('calendarly-data', JSON.stringify(calendarData));
-    localStorage.setItem('calendarly-important', JSON.stringify([...importantDays]));
+    const data = {
+        notes: calendarData,
+        important: [...importantDays],
+        schedule: dailySchedule,
+        theme: document.body.classList.contains('light-mode') ? 'light' : 'dark'
+    };
+    localStorage.setItem('calendarly-data', JSON.stringify(data));
 }
 
 // Format date as YYYY-MM-DD
@@ -220,10 +229,19 @@ function createDayCell(date, isOtherMonth) {
     const dayNumber = document.createElement('div');
     dayNumber.className = 'day-number';
     dayNumber.textContent = date.getDate();
+
+    // Add schedule indicator if day has schedule items
+    const dateKey = formatDate(date);
+    if (dailySchedule[dateKey] && dailySchedule[dateKey].length > 0) {
+        const scheduleIcon = document.createElement('span');
+        scheduleIcon.className = 'schedule-indicator';
+        scheduleIcon.innerHTML = '📅';
+        dayNumber.appendChild(scheduleIcon);
+    }
+
     cell.appendChild(dayNumber);
 
     // Add preview if there's content
-    const dateKey = formatDate(date);
     if (calendarData[dateKey] && calendarData[dateKey].length > 0) {
         const preview = document.createElement('div');
         preview.className = 'day-preview';
@@ -263,6 +281,9 @@ function openEditor(date) {
     // Clear input and load existing bubbles
     document.getElementById('bubble-input').value = '';
     renderEditorBubbles();
+
+    // Render timeline
+    renderTimeline();
 
     // Switch views
     document.getElementById('calendar-view').classList.remove('active');
@@ -398,10 +419,24 @@ function nextMonth() {
     renderCalendar();
 }
 
+function prevDay() {
+    const newDate = new Date(selectedDate);
+    newDate.setDate(newDate.getDate() - 1);
+    openEditor(newDate);
+}
+
+function nextDay() {
+    const newDate = new Date(selectedDate);
+    newDate.setDate(newDate.getDate() + 1);
+    openEditor(newDate);
+}
+
 // Event listeners
 document.getElementById('prev-month').addEventListener('click', prevMonth);
 document.getElementById('next-month').addEventListener('click', nextMonth);
 document.getElementById('back-to-calendar').addEventListener('click', backToCalendar);
+document.getElementById('prev-day').addEventListener('click', prevDay);
+document.getElementById('next-day').addEventListener('click', nextDay);
 
 // Bubble input - add on Enter
 document.getElementById('bubble-input').addEventListener('keydown', (e) => {
@@ -510,15 +545,8 @@ document.getElementById('back-from-settings').addEventListener('click', () => {
 // Theme toggle
 document.getElementById('theme-toggle').addEventListener('click', () => {
     document.body.classList.toggle('light-mode');
-    const isLight = document.body.classList.contains('light-mode');
-    localStorage.setItem('theme', isLight ? 'light' : 'dark');
+    saveData();
 });
-
-// Load saved theme
-const savedTheme = localStorage.getItem('theme');
-if (savedTheme === 'light') {
-    document.body.classList.add('light-mode');
-}
 
 // Reset data
 document.getElementById('reset-data').addEventListener('click', () => {
@@ -526,25 +554,95 @@ document.getElementById('reset-data').addEventListener('click', () => {
         localStorage.clear();
         calendarData = {};
         importantDays = new Set();
+        dailySchedule = {};
+        document.body.classList.remove('light-mode');
         renderCalendar();
         alert('All data has been reset.');
     }
 });
 
-// Show data folder path
-document.getElementById('open-data-folder').addEventListener('click', async () => {
-    if (window.__TAURI__) {
-        try {
-            const dataDir = await window.__TAURI__.path.appDataDir();
-            // Copy to clipboard
-            navigator.clipboard.writeText(dataDir);
-            alert('Data folder path copied to clipboard:\n\n' + dataDir);
-        } catch (err) {
-            console.error('Get path error:', err);
-            alert('Could not get data folder path: ' + err.message);
+// Import/Export navigation
+document.getElementById('import-export-btn').addEventListener('click', () => {
+    document.getElementById('settings-view').classList.remove('active');
+    document.getElementById('import-export-view').classList.add('active');
+
+    // Populate textarea with current data (formatted) plus schema info
+    const exportData = {
+        _schema: {
+            description: "Calendarly data format - Edit this JSON and import it back",
+            availableColors: COLORS,
+            dateFormat: "YYYY-MM-DD (e.g., 2025-03-15)",
+            timeFormat: "HH:MM in 24-hour format (e.g., 14:30 for 2:30 PM)",
+            exampleNote: {
+                text: "Example note text",
+                color: "blue"
+            },
+            exampleScheduleItem: {
+                text: "Hockey practice",
+                start: "18:00",
+                end: "19:30",
+                color: "green"
+            }
+        },
+        notes: calendarData,
+        important: [...importantDays],
+        schedule: dailySchedule,
+        theme: document.body.classList.contains('light-mode') ? 'light' : 'dark'
+    };
+    document.getElementById('json-textarea').value = JSON.stringify(exportData, null, 2);
+});
+
+document.getElementById('back-from-import-export').addEventListener('click', () => {
+    document.getElementById('import-export-view').classList.remove('active');
+    document.getElementById('settings-view').classList.add('active');
+});
+
+// Copy JSON to clipboard
+document.getElementById('copy-json-btn').addEventListener('click', async () => {
+    const textarea = document.getElementById('json-textarea');
+    try {
+        await navigator.clipboard.writeText(textarea.value);
+        alert('JSON copied to clipboard!');
+    } catch (err) {
+        // Fallback for older browsers
+        textarea.select();
+        document.execCommand('copy');
+        alert('JSON copied to clipboard!');
+    }
+});
+
+// Import JSON from textarea
+document.getElementById('import-json-btn').addEventListener('click', () => {
+    const textarea = document.getElementById('json-textarea');
+    try {
+        const data = JSON.parse(textarea.value);
+
+        // Validate structure
+        if (typeof data !== 'object') {
+            throw new Error('JSON must be an object');
         }
-    } else {
-        alert('Data is stored in browser localStorage\n(Open browser dev tools > Application > Local Storage)');
+
+        // Import data (ignore _schema field)
+        calendarData = data.notes || {};
+        importantDays = new Set(data.important || []);
+        dailySchedule = data.schedule || {};
+
+        // Apply theme
+        if (data.theme === 'light') {
+            document.body.classList.add('light-mode');
+        } else {
+            document.body.classList.remove('light-mode');
+        }
+
+        // Save to localStorage
+        saveData();
+
+        // Refresh calendar
+        renderCalendar();
+
+        alert('Data imported successfully!');
+    } catch (err) {
+        alert('Invalid JSON format:\n\n' + err.message);
     }
 });
 
@@ -600,6 +698,414 @@ const observer = new MutationObserver((mutations) => {
 const settingsView = document.getElementById('settings-view');
 if (settingsView) {
     observer.observe(settingsView, { attributes: true, attributeFilter: ['class'] });
+}
+
+// ===== DAILY SCHEDULE / TIMELINE =====
+
+// Find closest time option to start time (for end time inference)
+function findClosestTime(startTime, endInput, flip = false) {
+    if (!startTime || !endInput) return null;
+
+    // Parse start time
+    const [startHour, startMin] = startTime.split(':').map(Number);
+    const startMinutes = startHour * 60 + startMin;
+
+    // Parse end input
+    const timeMatch = endInput.trim().match(/(\d{1,2}):?(\d{2})?/);
+    if (!timeMatch) return null;
+
+    let hours = parseInt(timeMatch[1]);
+    let minutes = timeMatch[2] ? parseInt(timeMatch[2]) : 0;
+
+    if (hours > 23 || minutes > 59) return null;
+
+    // If already in 24h format (>= 13), use as-is
+    if (hours >= 13) {
+        return `${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}`;
+    }
+
+    // For 1-12, we have two options: AM and PM
+    const amHour = hours === 12 ? 0 : hours;
+    const pmHour = hours === 12 ? 12 : hours + 12;
+
+    const amMinutes = amHour * 60 + minutes;
+    const pmMinutes = pmHour * 60 + minutes;
+
+    // Calculate forward distances (only future times)
+    const amDist = amMinutes > startMinutes ? amMinutes - startMinutes : (24 * 60) - startMinutes + amMinutes;
+    const pmDist = pmMinutes > startMinutes ? pmMinutes - startMinutes : (24 * 60) - startMinutes + pmMinutes;
+
+    // Choose closest
+    let chosenHour = amDist <= pmDist ? amHour : pmHour;
+
+    // If flip is true, use the other option
+    if (flip) {
+        chosenHour = chosenHour === amHour ? pmHour : amHour;
+    }
+
+    return `${String(chosenHour).padStart(2, '0')}:${String(minutes).padStart(2, '0')}`;
+}
+
+// Render the timeline with 24 hours (00:00 to 23:59)
+function renderTimeline() {
+    const container = document.getElementById('timeline-container');
+    container.innerHTML = '';
+
+    const timeline = document.createElement('div');
+    timeline.className = 'timeline';
+
+    // Create 24 hours worth of 30-min slots (48 slots total)
+    for (let hour = 0; hour < 24; hour++) {
+        for (let halfHour = 0; halfHour < 2; halfHour++) {
+            const minutes = halfHour * 30;
+            const timeString = `${String(hour % 24).padStart(2, '0')}:${String(minutes).padStart(2, '0')}`;
+
+            const slot = document.createElement('div');
+            slot.className = 'time-slot';
+            slot.dataset.time = timeString;
+            slot.dataset.hour = hour;
+
+            // Only show label on the hour
+            if (minutes === 0) {
+                const label = document.createElement('div');
+                label.className = 'time-label';
+                label.textContent = timeString;
+                slot.appendChild(label);
+            }
+
+            slot.addEventListener('click', () => showScheduleForm(timeString, hour));
+
+            timeline.appendChild(slot);
+        }
+    }
+
+    // Add bubbles container for schedule items
+    const bubblesContainer = document.createElement('div');
+    bubblesContainer.className = 'schedule-bubbles-container';
+    bubblesContainer.id = 'schedule-bubbles';
+    timeline.appendChild(bubblesContainer);
+
+    container.appendChild(timeline);
+
+    // Render schedule items after a short delay to ensure timeline is measured
+    requestAnimationFrame(() => {
+        renderScheduleItems();
+    });
+}
+
+// Render schedule items as bubbles on the timeline
+function renderScheduleItems() {
+    const dateKey = formatDate(selectedDate);
+    const scheduleItems = dailySchedule[dateKey] || [];
+    const container = document.getElementById('schedule-bubbles');
+
+    if (!container) return;
+
+    container.innerHTML = '';
+
+    // Render items for current day
+    scheduleItems.forEach((item, index) => {
+        const bubble = createScheduleBubble(item, index, dateKey);
+        container.appendChild(bubble);
+    });
+
+    // Check previous day for events that bleed into today
+    const prevDate = new Date(selectedDate);
+    prevDate.setDate(prevDate.getDate() - 1);
+    const prevDateKey = formatDate(prevDate);
+    const prevScheduleItems = dailySchedule[prevDateKey] || [];
+
+    prevScheduleItems.forEach((item, index) => {
+        // Check if event ends after midnight (bleeds into current day)
+        const [endHour, endMin] = item.end.split(':').map(Number);
+        const [startHour, startMin] = item.start.split(':').map(Number);
+
+        // If end time is before start time, it bleeds into next day
+        if (endHour < startHour || (endHour === startHour && endMin < startMin)) {
+            // Create a modified item that starts at 00:00 on current day
+            const bleedItem = {
+                ...item,
+                start: '00:00',
+                // Keep the original end time
+            };
+            const bubble = createScheduleBubble(bleedItem, index, prevDateKey, true);
+            container.appendChild(bubble);
+        }
+    });
+}
+
+// Create a schedule bubble element
+function createScheduleBubble(item, index, dateKey, isFromPrevDay = false) {
+    const bubble = document.createElement('div');
+    bubble.className = `schedule-bubble bubble-${item.color}`;
+
+    // Add visual indicator if from previous day
+    if (isFromPrevDay) {
+        bubble.style.opacity = '0.7';
+        bubble.style.borderLeft = '3px solid var(--bubble-color)';
+    }
+
+    // Calculate position based on time
+    const {top, height} = calculateBubblePosition(item.start, item.end);
+    bubble.style.top = `${top}px`;
+    bubble.style.height = `${height}px`;
+
+    // Add text
+    const text = document.createElement('div');
+    text.className = 'schedule-bubble-text';
+    text.textContent = item.text + (isFromPrevDay ? ' (from prev day)' : '');
+    bubble.appendChild(text);
+
+    // Add delete button (only for items on current day)
+    if (!isFromPrevDay) {
+        const deleteBtn = document.createElement('button');
+        deleteBtn.className = 'delete-bubble';
+        deleteBtn.textContent = '×';
+        deleteBtn.addEventListener('click', (e) => {
+            e.stopPropagation();
+            deleteScheduleItem(index);
+        });
+        bubble.appendChild(deleteBtn);
+    }
+
+    return bubble;
+}
+
+// Calculate bubble position from start/end times
+function calculateBubblePosition(startTime, endTime) {
+    // Get dynamic slot height from timeline
+    const timeline = document.querySelector('.timeline');
+    if (!timeline) return {top: 0, height: 20};
+
+    const totalSlots = 48; // 24 hours * 2 (30-min slots)
+    const slotHeight = timeline.clientHeight / totalSlots;
+
+    // Parse start time
+    const [startHour, startMin] = startTime.split(':').map(Number);
+    const startSlots = (startHour * 2) + (startMin >= 30 ? 1 : 0);
+    const top = startSlots * slotHeight;
+
+    // Parse end time
+    const [endHour, endMin] = endTime.split(':').map(Number);
+    let endSlots = (endHour * 2) + (endMin > 30 ? 2 : (endMin > 0 ? 1 : 0));
+
+    // Handle next-day times (if end time is less than start time, it's next day)
+    if (endHour < startHour || (endHour === startHour && endMin < startMin)) {
+        endSlots += 48; // Add 24 hours worth of slots
+    }
+
+    const height = Math.max((endSlots - startSlots) * slotHeight, slotHeight / 2);
+
+    return {top, height};
+}
+
+// Show schedule form to add new item
+function showScheduleForm(clickedTime, hour) {
+    // Remove any existing form
+    const existingForm = document.querySelector('.schedule-form');
+    if (existingForm) {
+        existingForm.remove();
+    }
+
+    const form = document.createElement('div');
+    form.className = 'schedule-form';
+
+    // Calculate position dynamically
+    const timeline = document.querySelector('.timeline');
+    const container = document.getElementById('timeline-container');
+    const totalSlots = 48;
+    const slotHeight = timeline.clientHeight / totalSlots;
+    let top = hour * 2 * slotHeight;
+
+    // Check if form would overflow bottom of container
+    // Assume form height is ~250px
+    const formHeight = 250;
+    const containerHeight = container.clientHeight;
+
+    if (top + formHeight > containerHeight) {
+        // Position above the clicked time instead
+        top = Math.max(0, top - formHeight);
+    }
+
+    form.style.top = `${top}px`;
+    form.style.left = '70px';
+
+    // Text input
+    const textInput = document.createElement('input');
+    textInput.type = 'text';
+    textInput.placeholder = 'Event title...';
+    textInput.id = 'schedule-text-input';
+    textInput.autocomplete = 'off';
+    form.appendChild(textInput);
+
+    // Time inputs row
+    const timeRow = document.createElement('div');
+    timeRow.className = 'schedule-form-row';
+
+    const startInput = document.createElement('input');
+    startInput.type = 'text';
+    startInput.value = clickedTime;
+    startInput.placeholder = 'HH:MM';
+    startInput.id = 'schedule-start-input';
+    startInput.autocomplete = 'off';
+    timeRow.appendChild(startInput);
+
+    const endInput = document.createElement('input');
+    endInput.type = 'text';
+    endInput.placeholder = 'End time (HH:MM)';
+    endInput.id = 'schedule-end-input';
+    endInput.autocomplete = 'off';
+    timeRow.appendChild(endInput);
+
+    // Flip toggle button
+    let flipped = false;
+    const flipBtn = document.createElement('button');
+    flipBtn.type = 'button';
+    flipBtn.textContent = '⇄';
+    flipBtn.className = 'flip-btn';
+    flipBtn.title = 'Flip AM/PM';
+    flipBtn.addEventListener('click', (e) => {
+        e.preventDefault();
+        flipped = !flipped;
+        flipBtn.classList.toggle('active', flipped);
+        // Update the display immediately
+        updateEndTimeDisplay();
+    });
+    timeRow.appendChild(flipBtn);
+
+    // Auto-update end time display as user types
+    function updateEndTimeDisplay() {
+        const rawValue = endInput.dataset.rawValue || endInput.value;
+        const parsed = findClosestTime(startInput.value, rawValue, flipped);
+        if (parsed) {
+            // Convert to 12h format for display
+            const [h, m] = parsed.split(':').map(Number);
+            const hour12 = h === 0 ? 12 : h > 12 ? h - 12 : h;
+            const ampm = h >= 12 ? 'PM' : 'AM';
+            endInput.value = `${hour12}:${String(m).padStart(2, '0')} ${ampm}`;
+            endInput.dataset.parsed24h = parsed; // Store the 24h version
+        }
+    }
+
+    let typingTimeout;
+    endInput.addEventListener('input', () => {
+        // Store the raw typed value
+        endInput.dataset.rawValue = endInput.value;
+
+        // Reset flip when user types
+        flipped = false;
+        flipBtn.classList.remove('active');
+
+        // Only auto-update if they've typed complete minutes (has colon AND 2 digits after it, or 3+ digits total)
+        const value = endInput.value;
+        const hasColonWithMinutes = value.includes(':') && value.split(':')[1] && value.split(':')[1].length >= 2;
+        const hasMinutes = hasColonWithMinutes || value.replace(/\D/g, '').length >= 3;
+
+        // Update after short delay (when they stop typing)
+        clearTimeout(typingTimeout);
+        if (hasMinutes) {
+            typingTimeout = setTimeout(() => {
+                updateEndTimeDisplay();
+            }, 500);
+        }
+    });
+
+    form.appendChild(timeRow);
+
+    // Color picker
+    const colorPicker = document.createElement('div');
+    colorPicker.className = 'color-picker';
+    let selectedColor = 'blue';
+
+    COLORS.forEach(color => {
+        const option = document.createElement('div');
+        option.className = `color-option bubble-${color}`;
+        option.style.background = `var(--bubble-color)`;
+        if (color === selectedColor) {
+            option.classList.add('selected');
+        }
+        option.addEventListener('click', () => {
+            colorPicker.querySelectorAll('.color-option').forEach(o => o.classList.remove('selected'));
+            option.classList.add('selected');
+            selectedColor = color;
+        });
+        colorPicker.appendChild(option);
+    });
+    form.appendChild(colorPicker);
+
+    // Buttons
+    const buttons = document.createElement('div');
+    buttons.className = 'schedule-form-buttons';
+
+    const addBtn = document.createElement('button');
+    addBtn.className = 'add-btn';
+    addBtn.textContent = 'Add';
+    addBtn.addEventListener('click', () => {
+        const text = textInput.value.trim();
+        const start = startInput.value;
+        const endParsed = endInput.dataset.parsed24h || findClosestTime(start, endInput.value, flipped);
+
+        if (text && start && endParsed) {
+            addScheduleItem(text, start, endParsed, selectedColor);
+            form.remove();
+        } else if (text && start && endInput.value) {
+            alert('Invalid time format. Use HH:MM (e.g., 9:30, 14:00)');
+        }
+    });
+    buttons.appendChild(addBtn);
+
+    const cancelBtn = document.createElement('button');
+    cancelBtn.className = 'cancel-btn';
+    cancelBtn.textContent = 'Cancel';
+    cancelBtn.addEventListener('click', () => form.remove());
+    buttons.appendChild(cancelBtn);
+
+    form.appendChild(buttons);
+
+    // Add Enter key support
+    textInput.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter' && textInput.value.trim() && startInput.value && endInput.value) {
+            addBtn.click();
+        }
+    });
+
+    document.getElementById('timeline-container').appendChild(form);
+    textInput.focus();
+}
+
+// Add schedule item
+function addScheduleItem(text, start, end, color) {
+    const dateKey = formatDate(selectedDate);
+
+    if (!dailySchedule[dateKey]) {
+        dailySchedule[dateKey] = [];
+    }
+
+    dailySchedule[dateKey].push({
+        text,
+        start,
+        end,
+        color
+    });
+
+    saveData();
+    renderScheduleItems();
+}
+
+// Delete schedule item
+function deleteScheduleItem(index) {
+    const dateKey = formatDate(selectedDate);
+
+    if (dailySchedule[dateKey]) {
+        dailySchedule[dateKey].splice(index, 1);
+
+        if (dailySchedule[dateKey].length === 0) {
+            delete dailySchedule[dateKey];
+        }
+
+        saveData();
+        renderScheduleItems();
+    }
 }
 
 // Initialize

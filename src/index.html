@@ -48,12 +48,23 @@
             <div class="editor-header">
                 <button id="back-to-calendar">&lt; Back</button>
                 <h2 id="editor-date"></h2>
+                <div class="day-navigation">
+                    <button id="prev-day">&lt;</button>
+                    <button id="next-day">&gt;</button>
+                </div>
             </div>
             <div class="editor-content">
-                <div class="bubble-input-container">
-                    <input type="text" id="bubble-input" placeholder="Add a note and press Enter...">
+                <div class="editor-left">
+                    <h3 class="section-title">Calendar Notes</h3>
+                    <div class="bubble-input-container">
+                        <input type="text" id="bubble-input" placeholder="Add a note and press Enter..." autocomplete="off">
+                    </div>
+                    <div id="bubbles-container"></div>
                 </div>
-                <div id="bubbles-container"></div>
+                <div class="editor-right">
+                    <h3 class="section-title">Daily Schedule</h3>
+                    <div id="timeline-container"></div>
+                </div>
             </div>
         </div>
 
@@ -75,9 +86,49 @@
                 <div class="setting-item">
                     <div class="setting-label">Data</div>
                     <div class="setting-buttons">
-                        <button id="open-data-folder" class="setting-button">Show Data Folder Path</button>
+                        <button id="import-export-btn" class="setting-button">Import/Export JSON</button>
                         <button id="reset-data" class="setting-button danger">Reset All Data</button>
                     </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Import/Export View -->
+        <div id="import-export-view" class="view">
+            <div class="import-export-header">
+                <button id="back-from-import-export" class="back-button">
+                    <span class="back-arrow">←</span>
+                    <span>Back to Settings</span>
+                </button>
+                <h2>Import/Export Data</h2>
+            </div>
+            <div class="import-export-content">
+                <div class="import-export-left">
+                    <div class="info-section">
+                        <h3>How to Use</h3>
+                        <ol>
+                            <li>Click "Copy JSON" to copy your data</li>
+                            <li>Paste it into an LLM (like Claude) to edit</li>
+                            <li>Example: "Add hockey practice every Tuesday at 6 PM until Dec 18"</li>
+                            <li>Paste the modified JSON back into the editor</li>
+                            <li>Click "Import JSON" to update your calendar</li>
+                        </ol>
+                    </div>
+                    <div class="warning-section">
+                        <div class="warning-icon">⚠️</div>
+                        <div class="warning-text">
+                            <strong>Warning:</strong> This directly modifies your calendar data.
+                            Invalid JSON or incorrect data structure may cause data loss.
+                            Make sure to keep a backup copy before importing!
+                        </div>
+                    </div>
+                    <div class="json-controls">
+                        <button id="copy-json-btn" class="action-button primary">Copy JSON</button>
+                        <button id="import-json-btn" class="action-button danger">Import JSON</button>
+                    </div>
+                </div>
+                <div class="import-export-right">
+                    <textarea id="json-textarea" spellcheck="false"></textarea>
                 </div>
             </div>
         </div>
