@@ -379,6 +379,14 @@ function createEditorBubble(bubble, index) {
 
     el.appendChild(controls);
 
+    // Right-click handler to open schedule form with pre-filled data
+    el.addEventListener('contextmenu', (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        // Open schedule form with empty start time and pre-fill with bubble data
+        showScheduleForm('', 0, bubble.text, bubble.color);
+    });
+
     return el;
 }
 
@@ -899,6 +907,16 @@ function createScheduleBubble(item, index, dateKey, isFromPrevDay = false) {
             deleteScheduleItem(index);
         });
         bubble.appendChild(deleteBtn);
+
+        // Click handler to edit this schedule item
+        bubble.addEventListener('click', (e) => {
+            // Don't trigger if clicking delete button
+            if (e.target.classList.contains('delete-bubble')) {
+                return;
+            }
+            editScheduleItem(index, item);
+        });
+        bubble.style.cursor = 'pointer';
     }
 
     return bubble;
@@ -933,7 +951,7 @@ function calculateBubblePosition(startTime, endTime) {
 }
 
 // Show schedule form to add new item
-function showScheduleForm(clickedTime, hour) {
+function showScheduleForm(clickedTime, hour, prefillText = '', prefillColor = 'blue') {
     // Remove any existing form
     const existingForm = document.querySelector('.schedule-form');
     if (existingForm) {
@@ -969,6 +987,7 @@ function showScheduleForm(clickedTime, hour) {
     textInput.placeholder = 'Event title...';
     textInput.id = 'schedule-text-input';
     textInput.autocomplete = 'off';
+    textInput.value = prefillText; // Pre-fill text if provided
     form.appendChild(textInput);
 
     // Time inputs row
@@ -1048,7 +1067,7 @@ function showScheduleForm(clickedTime, hour) {
     // Color picker
     const colorPicker = document.createElement('div');
     colorPicker.className = 'color-picker';
-    let selectedColor = 'blue';
+    let selectedColor = prefillColor; // Use pre-filled color
 
     COLORS.forEach(color => {
         const option = document.createElement('div');
@@ -1106,6 +1125,178 @@ function showScheduleForm(clickedTime, hour) {
     textInput.focus();
 }
 
+// Show schedule form to edit existing item
+function showScheduleFormForEdit(clickedTime, hour, prefillText, prefillColor, prefillEndTime, itemIndex) {
+    // Remove any existing form
+    const existingForm = document.querySelector('.schedule-form');
+    if (existingForm) {
+        existingForm.remove();
+    }
+
+    const form = document.createElement('div');
+    form.className = 'schedule-form';
+
+    // Calculate position dynamically
+    const timeline = document.querySelector('.timeline');
+    const container = document.getElementById('timeline-container');
+    const totalSlots = 48;
+    const slotHeight = timeline.clientHeight / totalSlots;
+    let top = hour * 2 * slotHeight;
+
+    // Check if form would overflow bottom of container
+    const formHeight = 250;
+    const containerHeight = container.clientHeight;
+
+    if (top + formHeight > containerHeight) {
+        top = Math.max(0, top - formHeight);
+    }
+
+    form.style.top = `${top}px`;
+    form.style.left = '70px';
+
+    // Text input
+    const textInput = document.createElement('input');
+    textInput.type = 'text';
+    textInput.placeholder = 'Event title...';
+    textInput.id = 'schedule-text-input';
+    textInput.autocomplete = 'off';
+    textInput.value = prefillText;
+    form.appendChild(textInput);
+
+    // Time inputs row
+    const timeRow = document.createElement('div');
+    timeRow.className = 'schedule-form-row';
+
+    const startInput = document.createElement('input');
+    startInput.type = 'text';
+    startInput.value = clickedTime;
+    startInput.placeholder = 'HH:MM';
+    startInput.id = 'schedule-start-input';
+    startInput.autocomplete = 'off';
+    timeRow.appendChild(startInput);
+
+    const endInput = document.createElement('input');
+    endInput.type = 'text';
+    endInput.placeholder = 'End time (HH:MM)';
+    endInput.id = 'schedule-end-input';
+    endInput.autocomplete = 'off';
+    // Convert end time to 12h format for display
+    const [endH, endM] = prefillEndTime.split(':').map(Number);
+    const endHour12 = endH === 0 ? 12 : endH > 12 ? endH - 12 : endH;
+    const endAmpm = endH >= 12 ? 'PM' : 'AM';
+    endInput.value = `${endHour12}:${String(endM).padStart(2, '0')} ${endAmpm}`;
+    endInput.dataset.parsed24h = prefillEndTime;
+    timeRow.appendChild(endInput);
+
+    // Flip toggle button
+    let flipped = false;
+    const flipBtn = document.createElement('button');
+    flipBtn.type = 'button';
+    flipBtn.textContent = '⇄';
+    flipBtn.className = 'flip-btn';
+    flipBtn.title = 'Flip AM/PM';
+    flipBtn.addEventListener('click', (e) => {
+        e.preventDefault();
+        flipped = !flipped;
+        flipBtn.classList.toggle('active', flipped);
+        updateEndTimeDisplay();
+    });
+    timeRow.appendChild(flipBtn);
+
+    // Auto-update end time display as user types
+    function updateEndTimeDisplay() {
+        const rawValue = endInput.dataset.rawValue || endInput.value;
+        const parsed = findClosestTime(startInput.value, rawValue, flipped);
+        if (parsed) {
+            const [h, m] = parsed.split(':').map(Number);
+            const hour12 = h === 0 ? 12 : h > 12 ? h - 12 : h;
+            const ampm = h >= 12 ? 'PM' : 'AM';
+            endInput.value = `${hour12}:${String(m).padStart(2, '0')} ${ampm}`;
+            endInput.dataset.parsed24h = parsed;
+        }
+    }
+
+    let typingTimeout;
+    endInput.addEventListener('input', () => {
+        endInput.dataset.rawValue = endInput.value;
+        flipped = false;
+        flipBtn.classList.remove('active');
+
+        const value = endInput.value;
+        const hasColonWithMinutes = value.includes(':') && value.split(':')[1] && value.split(':')[1].length >= 2;
+        const hasMinutes = hasColonWithMinutes || value.replace(/\D/g, '').length >= 3;
+
+        clearTimeout(typingTimeout);
+        if (hasMinutes) {
+            typingTimeout = setTimeout(() => {
+                updateEndTimeDisplay();
+            }, 500);
+        }
+    });
+
+    form.appendChild(timeRow);
+
+    // Color picker
+    const colorPicker = document.createElement('div');
+    colorPicker.className = 'color-picker';
+    let selectedColor = prefillColor;
+
+    COLORS.forEach(color => {
+        const option = document.createElement('div');
+        option.className = `color-option bubble-${color}`;
+        option.style.background = `var(--bubble-color)`;
+        if (color === selectedColor) {
+            option.classList.add('selected');
+        }
+        option.addEventListener('click', () => {
+            colorPicker.querySelectorAll('.color-option').forEach(o => o.classList.remove('selected'));
+            option.classList.add('selected');
+            selectedColor = color;
+        });
+        colorPicker.appendChild(option);
+    });
+    form.appendChild(colorPicker);
+
+    // Buttons
+    const buttons = document.createElement('div');
+    buttons.className = 'schedule-form-buttons';
+
+    const updateBtn = document.createElement('button');
+    updateBtn.className = 'add-btn';
+    updateBtn.textContent = 'Update';
+    updateBtn.addEventListener('click', () => {
+        const text = textInput.value.trim();
+        const start = startInput.value;
+        const endParsed = endInput.dataset.parsed24h || findClosestTime(start, endInput.value, flipped);
+
+        if (text && start && endParsed) {
+            updateScheduleItem(itemIndex, text, start, endParsed, selectedColor);
+            form.remove();
+        } else if (text && start && endInput.value) {
+            alert('Invalid time format. Use HH:MM (e.g., 9:30, 14:00)');
+        }
+    });
+    buttons.appendChild(updateBtn);
+
+    const cancelBtn = document.createElement('button');
+    cancelBtn.className = 'cancel-btn';
+    cancelBtn.textContent = 'Cancel';
+    cancelBtn.addEventListener('click', () => form.remove());
+    buttons.appendChild(cancelBtn);
+
+    form.appendChild(buttons);
+
+    // Add Enter key support
+    textInput.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter' && textInput.value.trim() && startInput.value && endInput.value) {
+            updateBtn.click();
+        }
+    });
+
+    document.getElementById('timeline-container').appendChild(form);
+    textInput.focus();
+}
+
 // Add schedule item
 function addScheduleItem(text, start, end, color) {
     const dateKey = formatDate(selectedDate);
@@ -1123,6 +1314,32 @@ function addScheduleItem(text, start, end, color) {
 
     saveData();
     renderScheduleItems();
+}
+
+// Edit existing schedule item
+function editScheduleItem(index, item) {
+    // Parse the start time to get the hour for form positioning
+    const [startHour] = item.start.split(':').map(Number);
+
+    // Show the schedule form with pre-filled data
+    showScheduleFormForEdit(item.start, startHour, item.text, item.color, item.end, index);
+}
+
+// Update existing schedule item
+function updateScheduleItem(index, text, start, end, color) {
+    const dateKey = formatDate(selectedDate);
+
+    if (dailySchedule[dateKey] && dailySchedule[dateKey][index]) {
+        dailySchedule[dateKey][index] = {
+            text,
+            start,
+            end,
+            color
+        };
+
+        saveData();
+        renderScheduleItems();
+    }
 }
 
 // Delete schedule item
