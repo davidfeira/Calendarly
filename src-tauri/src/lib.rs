@@ -1,4 +1,3 @@
-use std::sync::{Arc, Mutex};
 use std::thread;
 
 // OAuth callback server state
@@ -11,7 +10,7 @@ fn get_oauth_callback_url() -> String {
 }
 
 // Start OAuth callback HTTP server
-fn start_oauth_server(app_handle: tauri::AppHandle) {
+fn start_oauth_server(_app_handle: tauri::AppHandle) {
     thread::spawn(move || {
         let server = tiny_http::Server::http(format!("127.0.0.1:{}", OAUTH_CALLBACK_PORT)).unwrap();
         println!("OAuth callback server started on port {}", OAUTH_CALLBACK_PORT);
