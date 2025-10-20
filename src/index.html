@@ -98,22 +98,11 @@
             </div>
             <div class="settings-content">
                 <div class="setting-item">
-                    <div class="setting-label">Cloud Sync</div>
-                    <div id="sync-status" class="sync-status">Not signed in</div>
-                    <div id="sync-auth-form" class="sync-auth-form">
-                        <input type="text" id="sync-username" placeholder="Username" autocomplete="off">
-                        <input type="password" id="sync-password" placeholder="Password" autocomplete="off">
-                        <div class="setting-buttons">
-                            <button id="sync-login-btn" class="setting-button">Sign In</button>
-                            <button id="sync-register-btn" class="setting-button">Create Account</button>
-                        </div>
-                    </div>
-                    <div id="sync-logged-in" class="sync-logged-in" style="display: none;">
-                        <div class="setting-buttons">
-                            <button id="sync-push-btn" class="setting-button">Push to Cloud</button>
-                            <button id="sync-pull-btn" class="setting-button">Pull from Cloud</button>
-                            <button id="sync-logout-btn" class="setting-button danger">Sign Out</button>
-                        </div>
+                    <div class="setting-label">Dropbox Sync</div>
+                    <div id="dropbox-status" class="sync-status">Not connected</div>
+                    <div class="setting-buttons">
+                        <button id="dropbox-connect-btn" class="setting-button">Connect Dropbox</button>
+                        <button id="dropbox-disconnect-btn" class="setting-button danger" style="display: none;">Disconnect</button>
                     </div>
                 </div>
                 <div class="setting-item">
@@ -179,8 +168,7 @@
         </div>
     </div>
 
-    <script src="https://cdn.jsdelivr.net/npm/gun/gun.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/gun/sea.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/dropbox.js/10.34.0/Dropbox-sdk.min.js"></script>
     <script src="app.js"></script>
 </body>
 </html>

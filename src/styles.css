@@ -661,7 +661,7 @@ body {
     box-shadow: 0 2px 8px rgba(232, 17, 35, 0.3);
 }
 
-/* Cloud Sync Styles */
+/* Dropbox Sync Styles */
 .sync-status {
     font-size: 13px;
     color: var(--text-secondary);

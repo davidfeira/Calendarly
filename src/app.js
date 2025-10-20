@@ -9,229 +9,295 @@ let use24HourTime = false; // Time format preference (false = 12-hour, true = 24
 // Available colors
 const COLORS = ['blue', 'red', 'green', 'yellow', 'purple', 'orange', 'pink', 'teal', 'gray', 'brown'];
 
-// ===== GUN.JS CLOUD SYNC =====
-let gun = null;
-let currentUser = null;
-let syncEnabled = false;
-
-// Initialize Gun.js
-function initGun() {
-    gun = Gun([
-        'https://gun-manhattan.herokuapp.com/gun',
-        'https://gun-us.herokuapp.com/gun'
-    ]);
-
-    // Check if user was previously logged in
-    const savedUsername = localStorage.getItem('gun-username');
-    if (savedUsername) {
-        updateSyncStatus(`Previously: ${savedUsername} (sign in again to sync)`);
-    }
-}
+// ===== DROPBOX SYNC =====
+const DROPBOX_APP_KEY = 'vespssyqwing7io';
+const DROPBOX_FILE_PATH = '/Calendarly/calendar-data.json';
+let dropboxClient = null;
 
 // Update sync status UI
 function updateSyncStatus(message, className = '') {
-    const statusEl = document.getElementById('sync-status');
+    const statusEl = document.getElementById('dropbox-status');
     if (statusEl) {
         statusEl.textContent = message;
         statusEl.className = 'sync-status ' + className;
     }
 }
 
-// Show/hide sync UI sections
-function updateSyncUI(loggedIn) {
-    const authForm = document.getElementById('sync-auth-form');
-    const loggedInSection = document.getElementById('sync-logged-in');
+// Check if user is connected to Dropbox
+function isDropboxConnected() {
+    const accessToken = localStorage.getItem('dropbox-access-token');
+    if (accessToken) {
+        dropboxClient = new Dropbox.Dropbox({ accessToken });
+        return true;
+    }
+    return false;
+}
 
-    if (loggedIn) {
-        authForm.style.display = 'none';
-        loggedInSection.style.display = 'flex';
+// Initialize Dropbox connection on page load
+function initDropbox() {
+    // Listen for window focus to detect when user returns from browser OAuth
+    window.addEventListener('focus', async () => {
+        // Only check clipboard if we're awaiting OAuth completion
+        const awaitingOAuth = localStorage.getItem('awaiting-oauth');
+        if (!awaitingOAuth) return;
+
+        console.log('Window focused, checking clipboard for OAuth token...');
+
+        try {
+            // Try to read from clipboard
+            const clipboardText = await navigator.clipboard.readText();
+
+            if (clipboardText && clipboardText.includes('access_token')) {
+                console.log('Found token in clipboard!');
+
+                // Extract token from URL
+                const urlObj = new URL(clipboardText);
+                const hash = urlObj.hash.substring(1);
+                const params = new URLSearchParams(hash);
+                const accessToken = params.get('access_token');
+
+                if (accessToken) {
+                    console.log('✅ Successfully extracted token from clipboard');
+
+                    // Clear awaiting flag
+                    localStorage.removeItem('awaiting-oauth');
+
+                    // Save token and connect
+                    localStorage.setItem('dropbox-access-token', accessToken);
+                    dropboxClient = new Dropbox.Dropbox({ accessToken });
+                    updateSyncStatus('Connected to Dropbox', 'synced');
+                    updateDropboxUI(true);
+
+                    // Auto-sync after connecting
+                    syncToDropbox();
+                }
+            }
+        } catch (err) {
+            // Clipboard read failed (permission denied or other error)
+            console.log('Could not read clipboard:', err.message);
+            // Don't show error to user, just silently fail
+        }
+    });
+
+    // Listen for OAuth callback messages from popup window
+    window.addEventListener('message', (event) => {
+        if (event.data && event.data.type === 'dropbox-auth-success') {
+            const accessToken = event.data.accessToken;
+            if (accessToken) {
+                localStorage.setItem('dropbox-access-token', accessToken);
+                dropboxClient = new Dropbox.Dropbox({ accessToken });
+                updateSyncStatus('Connected to Dropbox', 'synced');
+                updateDropboxUI(true);
+                // Auto-sync after connecting
+                syncToDropbox();
+            }
+        }
+    });
+
+    // Check if we're returning from OAuth redirect (for direct navigation, not popup)
+    const hash = window.location.hash;
+    if (hash) {
+        const params = new URLSearchParams(hash.substring(1));
+        const accessToken = params.get('access_token');
+
+        if (accessToken) {
+            localStorage.setItem('dropbox-access-token', accessToken);
+            dropboxClient = new Dropbox.Dropbox({ accessToken });
+            updateSyncStatus('Connected to Dropbox', 'synced');
+            updateDropboxUI(true);
+
+            // Clean up URL
+            window.history.replaceState(null, '', window.location.pathname);
+
+            // Auto-sync after connecting
+            syncToDropbox();
+        }
+    } else if (isDropboxConnected()) {
+        updateSyncStatus('Connected to Dropbox', 'synced');
+        updateDropboxUI(true);
+        // Auto-load from Dropbox on startup
+        loadFromDropbox();
     } else {
-        authForm.style.display = 'flex';
-        loggedInSection.style.display = 'none';
+        updateSyncStatus('Not connected');
+        updateDropboxUI(false);
     }
 }
 
-// Register new account
-async function registerAccount() {
-    const username = document.getElementById('sync-username').value.trim();
-    const password = document.getElementById('sync-password').value;
+// Update UI based on connection status
+function updateDropboxUI(connected) {
+    const connectBtn = document.getElementById('dropbox-connect-btn');
+    const disconnectBtn = document.getElementById('dropbox-disconnect-btn');
 
-    if (!username || !password) {
-        alert('Please enter both username and password');
+    if (connected) {
+        connectBtn.style.display = 'none';
+        disconnectBtn.style.display = 'inline-block';
+    } else {
+        connectBtn.style.display = 'inline-block';
+        disconnectBtn.style.display = 'none';
+    }
+}
+
+// Connect to Dropbox (OAuth flow)
+async function connectDropbox() {
+    // Check if we're in Tauri (desktop) or web
+    const isTauri = window.__TAURI__ !== undefined;
+
+    // Use fixed redirect URIs that match Dropbox app settings
+    let redirectUri;
+    if (isTauri) {
+        // Use OAuth callback server running on port 37812 (started by Rust backend)
+        redirectUri = 'http://localhost:37812/oauth-callback';
+        console.log('🎯 Using OAuth callback server:', redirectUri);
+    } else if (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1') {
+        redirectUri = `http://localhost:${window.location.port || '8080'}/oauth-callback`;
+    } else {
+        // Production (Vercel)
+        redirectUri = window.location.origin + '/oauth-callback';
+    }
+
+    console.log('🔗 Dropbox Redirect URI:', redirectUri);
+    console.log('📝 Add this URL to your Dropbox App Console under OAuth 2 → Redirect URIs');
+
+    const authUrl = `https://www.dropbox.com/oauth2/authorize?client_id=${DROPBOX_APP_KEY}&response_type=token&redirect_uri=${encodeURIComponent(redirectUri)}`;
+
+    // Save current state before navigating away
+    saveData(false); // Don't auto-sync to prevent issues
+
+    if (isTauri) {
+        // Desktop: Open in system browser (allows all sign-in options)
+        // After OAuth, callback page will copy token to clipboard
+        try {
+            // Set flag to indicate we're waiting for OAuth
+            localStorage.setItem('awaiting-oauth', Date.now().toString());
+
+            await window.__TAURI__.shell.open(authUrl);
+            updateSyncStatus('Authorize in browser, then switch back here', 'syncing');
+
+            // Auto-clear flag after 2 minutes
+            setTimeout(() => {
+                const awaitingOAuth = localStorage.getItem('awaiting-oauth');
+                if (awaitingOAuth) {
+                    localStorage.removeItem('awaiting-oauth');
+                    updateSyncStatus('OAuth timed out - please try again', 'error');
+                }
+            }, 120000); // 2 minutes
+        } catch (error) {
+            console.error('Failed to open browser:', error);
+            localStorage.removeItem('awaiting-oauth');
+            updateSyncStatus('Failed to open browser', 'error');
+            alert('Failed to open browser. Please try again or check permissions.');
+        }
+    } else {
+        // Web: Navigate to Dropbox OAuth (will redirect back to oauth-callback)
+        updateSyncStatus('Redirecting to Dropbox...', 'syncing');
+        window.location.href = authUrl;
+    }
+}
+
+// Disconnect from Dropbox
+function disconnectDropbox() {
+    if (confirm('Are you sure you want to disconnect from Dropbox? Your local data will remain safe.')) {
+        localStorage.removeItem('dropbox-access-token');
+        dropboxClient = null;
+        updateSyncStatus('Not connected');
+        updateDropboxUI(false);
+    }
+}
+
+// Sync local data to Dropbox
+async function syncToDropbox() {
+    if (!dropboxClient) {
+        alert('Please connect to Dropbox first');
         return;
     }
 
-    if (password.length < 6) {
-        alert('Password must be at least 6 characters');
+    try {
+        updateSyncStatus('Syncing to Dropbox...', 'syncing');
+
+        const data = {
+            notes: calendarData,
+            important: [...importantDays],
+            schedule: dailySchedule,
+            theme: document.body.classList.contains('light-mode') ? 'light' : 'dark',
+            use24HourTime: use24HourTime,
+            lastUpdate: Date.now()
+        };
+
+        const fileContent = JSON.stringify(data, null, 2);
+
+        await dropboxClient.filesUpload({
+            path: DROPBOX_FILE_PATH,
+            contents: fileContent,
+            mode: 'overwrite',
+            autorename: false
+        });
+
+        updateSyncStatus(`Synced to Dropbox (${new Date().toLocaleTimeString()})`, 'synced');
+    } catch (error) {
+        console.error('Dropbox sync error:', error);
+        updateSyncStatus('Sync failed');
+        alert('Failed to sync to Dropbox: ' + error.message);
+    }
+}
+
+// Load data from Dropbox
+async function loadFromDropbox() {
+    if (!dropboxClient) {
         return;
     }
 
-    updateSyncStatus('Creating account...', 'syncing');
+    try {
+        updateSyncStatus('Loading from Dropbox...', 'syncing');
 
-    currentUser = gun.user();
-    currentUser.create(username, password, (ack) => {
-        if (ack.err) {
-            updateSyncStatus('Error: ' + ack.err);
-            alert('Registration failed: ' + ack.err);
-        } else {
-            // Auto-login after registration
-            loginToSync();
-        }
-    });
-}
+        const response = await dropboxClient.filesDownload({ path: DROPBOX_FILE_PATH });
+        const fileBlob = response.result.fileBlob;
+        const text = await fileBlob.text();
+        const data = JSON.parse(text);
 
-// Login to sync account
-function loginToSync() {
-    const username = document.getElementById('sync-username').value.trim();
-    const password = document.getElementById('sync-password').value;
-
-    if (!username || !password) {
-        alert('Please enter both username and password');
-        return;
-    }
-
-    updateSyncStatus('Signing in...', 'syncing');
-
-    currentUser = gun.user();
-    currentUser.auth(username, password, (ack) => {
-        if (ack.err) {
-            updateSyncStatus('Sign in failed: ' + ack.err);
-            alert('Login failed: ' + ack.err);
-        } else {
-            localStorage.setItem('gun-username', username);
-            syncEnabled = true;
-            updateSyncStatus(`Signed in as ${username}`, 'synced');
-            updateSyncUI(true);
-
-            // Clear password field
-            document.getElementById('sync-password').value = '';
-
-            // Enable auto-sync
-            enableAutoSync();
-        }
-    });
-}
-
-// Logout from sync
-function logoutFromSync() {
-    if (currentUser) {
-        currentUser.leave();
-    }
-    currentUser = null;
-    syncEnabled = false;
-    localStorage.removeItem('gun-username');
-    updateSyncStatus('Not signed in');
-    updateSyncUI(false);
-
-    // Clear input fields
-    document.getElementById('sync-username').value = '';
-    document.getElementById('sync-password').value = '';
-}
-
-// Push data to cloud
-function pushToCloud() {
-    if (!currentUser || !syncEnabled) {
-        alert('Please sign in first');
-        return;
-    }
-
-    updateSyncStatus('Pushing to cloud...', 'syncing');
-
-    const data = {
-        notes: calendarData,
-        important: [...importantDays],
-        schedule: dailySchedule,
-        theme: document.body.classList.contains('light-mode') ? 'light' : 'dark',
-        use24HourTime: use24HourTime,
-        lastUpdate: Date.now()
-    };
-
-    currentUser.get('calendar').put(data, (ack) => {
-        if (ack.err) {
-            updateSyncStatus('Push failed: ' + ack.err);
-            alert('Failed to push to cloud: ' + ack.err);
-        } else {
-            const username = localStorage.getItem('gun-username');
-            updateSyncStatus(`Synced as ${username} (${new Date().toLocaleTimeString()})`, 'synced');
-        }
-    });
-}
-
-// Pull data from cloud
-function pullFromCloud() {
-    if (!currentUser || !syncEnabled) {
-        alert('Please sign in first');
-        return;
-    }
-
-    updateSyncStatus('Pulling from cloud...', 'syncing');
-
-    currentUser.get('calendar').once((data) => {
-        if (!data || !data.notes) {
-            updateSyncStatus('No cloud data found');
-            alert('No data found in cloud. Try pushing your local data first.');
-            return;
-        }
-
-        // Update local data
-        calendarData = data.notes || {};
-        importantDays = new Set(data.important || []);
-        dailySchedule = data.schedule || {};
-        use24HourTime = data.use24HourTime || false;
-
-        // Apply theme
-        if (data.theme === 'light') {
-            document.body.classList.add('light-mode');
-        } else {
-            document.body.classList.remove('light-mode');
-        }
-
-        // Update time format button
-        updateTimeFormatButton();
-
-        // Save to localStorage
-        saveData();
-
-        // Refresh UI
-        renderCalendar();
-        if (selectedDate) {
-            renderEditorBubbles();
-            renderScheduleItems();
-        }
-
-        const username = localStorage.getItem('gun-username');
-        updateSyncStatus(`Synced as ${username} (${new Date().toLocaleTimeString()})`, 'synced');
-    });
-}
-
-// Enable automatic real-time sync
-function enableAutoSync() {
-    if (!currentUser || !syncEnabled) return;
-
-    // Listen for changes from other devices
-    currentUser.get('calendar').on((data, key) => {
-        if (!data || !data.notes) return;
-
-        // Only update if data is newer than local (avoid sync loops)
+        // Check if cloud data is newer
         const localLastUpdate = localStorage.getItem('last-local-update') || 0;
         if (data.lastUpdate && data.lastUpdate > localLastUpdate) {
+            // Update local data
             calendarData = data.notes || {};
             importantDays = new Set(data.important || []);
             dailySchedule = data.schedule || {};
             use24HourTime = data.use24HourTime || false;
 
+            // Apply theme
+            if (data.theme === 'light') {
+                document.body.classList.add('light-mode');
+            } else {
+                document.body.classList.remove('light-mode');
+            }
+
+            // Update time format button
             updateTimeFormatButton();
-            saveData();
+
+            // Save to localStorage
+            saveData(false); // Don't auto-sync back to prevent loop
+
+            // Refresh UI
             renderCalendar();
             if (selectedDate) {
                 renderEditorBubbles();
                 renderScheduleItems();
             }
 
-            const username = localStorage.getItem('gun-username');
-            updateSyncStatus(`Auto-synced as ${username} (${new Date().toLocaleTimeString()})`, 'synced');
+            updateSyncStatus(`Loaded from Dropbox (${new Date().toLocaleTimeString()})`, 'synced');
+        } else {
+            updateSyncStatus('Connected to Dropbox', 'synced');
         }
-    });
+    } catch (error) {
+        // File might not exist yet - that's okay
+        if (error.status === 409) {
+            updateSyncStatus('Connected to Dropbox (no cloud data yet)');
+            // Push local data to create the file
+            syncToDropbox();
+        } else {
+            console.error('Dropbox load error:', error);
+            updateSyncStatus('Failed to load from Dropbox');
+        }
+    }
 }
 
 // Load data from localStorage
@@ -252,7 +318,7 @@ function loadData() {
 }
 
 // Save data to localStorage
-function saveData() {
+function saveData(autoSync = true) {
     const data = {
         notes: calendarData,
         important: [...importantDays],
@@ -263,13 +329,9 @@ function saveData() {
     localStorage.setItem('calendarly-data', JSON.stringify(data));
     localStorage.setItem('last-local-update', Date.now().toString());
 
-    // Auto-sync to cloud if enabled
-    if (syncEnabled && currentUser) {
-        const cloudData = {
-            ...data,
-            lastUpdate: Date.now()
-        };
-        currentUser.get('calendar').put(cloudData);
+    // Auto-sync to Dropbox if connected
+    if (autoSync && dropboxClient) {
+        syncToDropbox();
     }
 }
 
@@ -1728,15 +1790,12 @@ function deleteScheduleItem(index) {
     }
 }
 
-// Sync button event listeners
-document.getElementById('sync-register-btn').addEventListener('click', registerAccount);
-document.getElementById('sync-login-btn').addEventListener('click', loginToSync);
-document.getElementById('sync-logout-btn').addEventListener('click', logoutFromSync);
-document.getElementById('sync-push-btn').addEventListener('click', pushToCloud);
-document.getElementById('sync-pull-btn').addEventListener('click', pullFromCloud);
+// Dropbox button event listeners
+document.getElementById('dropbox-connect-btn').addEventListener('click', connectDropbox);
+document.getElementById('dropbox-disconnect-btn').addEventListener('click', disconnectDropbox);
 
 // Initialize
-initGun();
+initDropbox();
 loadData();
 renderCalendar();
 updateAutostartButton();

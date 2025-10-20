@@ -5,6 +5,7 @@
   "scripts": {
     "tauri": "tauri",
     "dev": "tauri dev",
+    "dev:web": "node dev-server.js",
     "build": "tauri build",
     "build:web": "node build-web.js"
   },
