@@ -344,6 +344,10 @@ function createEditorBubble(bubble, index) {
     text.textContent = bubble.text;
     el.appendChild(text);
 
+    // Controls container (color picker + delete button)
+    const controls = document.createElement('div');
+    controls.className = 'editor-bubble-controls';
+
     // Color picker
     const picker = document.createElement('div');
     picker.className = 'color-picker';
@@ -361,7 +365,7 @@ function createEditorBubble(bubble, index) {
         });
         picker.appendChild(option);
     });
-    el.appendChild(picker);
+    controls.appendChild(picker);
 
     // Delete button
     const deleteBtn = document.createElement('button');
@@ -371,7 +375,9 @@ function createEditorBubble(bubble, index) {
         e.stopPropagation();
         deleteBubble(index);
     });
-    el.appendChild(deleteBtn);
+    controls.appendChild(deleteBtn);
+
+    el.appendChild(controls);
 
     return el;
 }
