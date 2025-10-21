@@ -13,6 +13,8 @@ const COLORS = ['blue', 'red', 'green', 'yellow', 'purple', 'orange', 'pink', 't
 const DROPBOX_APP_KEY = 'vespssyqwing7io';
 const DROPBOX_FILE_PATH = '/Calendarly/calendar-data.json';
 let dropboxClient = null;
+let autoSyncInterval = null;
+const AUTO_SYNC_INTERVAL_MS = 10000; // Check every 10 seconds
 
 // Update sync status UI
 function updateSyncStatus(message, className = '') {
@@ -68,8 +70,10 @@ function initDropbox() {
                     updateSyncStatus('Connected to Dropbox', 'synced');
                     updateDropboxUI(true);
 
-                    // Auto-sync after connecting
-                    syncToDropbox();
+                    // Pull from Dropbox first to get latest data
+                    loadFromDropbox();
+                    // Start auto-sync polling
+                    startAutoSync();
                 }
             }
         } catch (err) {
@@ -88,8 +92,10 @@ function initDropbox() {
                 dropboxClient = new Dropbox.Dropbox({ accessToken });
                 updateSyncStatus('Connected to Dropbox', 'synced');
                 updateDropboxUI(true);
-                // Auto-sync after connecting
-                syncToDropbox();
+                // Pull from Dropbox first to get latest data
+                loadFromDropbox();
+                // Start auto-sync polling
+                startAutoSync();
             }
         }
     });
@@ -109,14 +115,18 @@ function initDropbox() {
             // Clean up URL
             window.history.replaceState(null, '', window.location.pathname);
 
-            // Auto-sync after connecting
-            syncToDropbox();
+            // Pull from Dropbox first to get latest data
+            loadFromDropbox();
+            // Start auto-sync polling
+            startAutoSync();
         }
     } else if (isDropboxConnected()) {
         updateSyncStatus('Connected to Dropbox', 'synced');
         updateDropboxUI(true);
         // Auto-load from Dropbox on startup
         loadFromDropbox();
+        // Start auto-sync polling
+        startAutoSync();
     } else {
         updateSyncStatus('Not connected');
         updateDropboxUI(false);
@@ -194,9 +204,36 @@ async function connectDropbox() {
     }
 }
 
+// Start automatic background syncing
+function startAutoSync() {
+    // Clear any existing interval
+    if (autoSyncInterval) {
+        clearInterval(autoSyncInterval);
+    }
+
+    // Poll for updates every 10 seconds
+    autoSyncInterval = setInterval(() => {
+        if (dropboxClient) {
+            loadFromDropbox(true); // silent mode
+        }
+    }, AUTO_SYNC_INTERVAL_MS);
+
+    console.log('✅ Auto-sync enabled - checking for updates every 10 seconds');
+}
+
+// Stop automatic background syncing
+function stopAutoSync() {
+    if (autoSyncInterval) {
+        clearInterval(autoSyncInterval);
+        autoSyncInterval = null;
+        console.log('⏹️ Auto-sync disabled');
+    }
+}
+
 // Disconnect from Dropbox
 function disconnectDropbox() {
     if (confirm('Are you sure you want to disconnect from Dropbox? Your local data will remain safe.')) {
+        stopAutoSync();
         localStorage.removeItem('dropbox-access-token');
         dropboxClient = null;
         updateSyncStatus('Not connected');
@@ -241,22 +278,28 @@ async function syncToDropbox() {
 }
 
 // Load data from Dropbox
-async function loadFromDropbox() {
+async function loadFromDropbox(silent = false) {
     if (!dropboxClient) {
         return;
     }
 
     try {
-        updateSyncStatus('Loading from Dropbox...', 'syncing');
+        if (!silent) {
+            updateSyncStatus('Loading from Dropbox...', 'syncing');
+        }
 
         const response = await dropboxClient.filesDownload({ path: DROPBOX_FILE_PATH });
         const fileBlob = response.result.fileBlob;
         const text = await fileBlob.text();
         const data = JSON.parse(text);
 
-        // Check if cloud data is newer
-        const localLastUpdate = localStorage.getItem('last-local-update') || 0;
-        if (data.lastUpdate && data.lastUpdate > localLastUpdate) {
+        // Always prefer cloud data if it has content, otherwise use timestamps
+        const cloudHasData = data.notes && Object.keys(data.notes).length > 0;
+        const localLastUpdate = parseInt(localStorage.getItem('last-local-update') || '0');
+        const cloudLastUpdate = parseInt(data.lastUpdate || '0');
+
+        // If cloud has data OR cloud is newer, use cloud data
+        if (cloudHasData || cloudLastUpdate > localLastUpdate) {
             // Update local data
             calendarData = data.notes || {};
             importantDays = new Set(data.important || []);
@@ -273,8 +316,8 @@ async function loadFromDropbox() {
             // Update time format button
             updateTimeFormatButton();
 
-            // Save to localStorage
-            saveData(false); // Don't auto-sync back to prevent loop
+            // Save to localStorage (don't sync back to prevent loop)
+            saveData(false);
 
             // Refresh UI
             renderCalendar();
@@ -283,19 +326,44 @@ async function loadFromDropbox() {
                 renderScheduleItems();
             }
 
-            updateSyncStatus(`Loaded from Dropbox (${new Date().toLocaleTimeString()})`, 'synced');
+            if (silent && cloudLastUpdate > localLastUpdate) {
+                updateSyncStatus(`Updated from other device (${new Date().toLocaleTimeString()})`, 'synced');
+            } else if (!silent) {
+                updateSyncStatus(`Loaded from Dropbox (${new Date().toLocaleTimeString()})`, 'synced');
+            }
+        } else if (localLastUpdate > cloudLastUpdate) {
+            // Local is newer, push to cloud
+            if (!silent) {
+                updateSyncStatus('Local data is newer, syncing to Dropbox...', 'syncing');
+            }
+            await syncToDropbox();
         } else {
-            updateSyncStatus('Connected to Dropbox', 'synced');
+            if (!silent) {
+                updateSyncStatus('Connected to Dropbox', 'synced');
+            }
         }
     } catch (error) {
-        // File might not exist yet - that's okay
+        // File might not exist yet
         if (error.status === 409) {
-            updateSyncStatus('Connected to Dropbox (no cloud data yet)');
-            // Push local data to create the file
-            syncToDropbox();
+            const localLastUpdate = parseInt(localStorage.getItem('last-local-update') || '0');
+            const localHasData = Object.keys(calendarData).length > 0 || importantDays.size > 0 || Object.keys(dailySchedule).length > 0;
+
+            if (localHasData && localLastUpdate > 0) {
+                // We have local data, push it to create the file
+                if (!silent) {
+                    updateSyncStatus('Creating cloud backup...', 'syncing');
+                }
+                await syncToDropbox();
+            } else {
+                if (!silent) {
+                    updateSyncStatus('Connected to Dropbox (no data yet)');
+                }
+            }
         } else {
             console.error('Dropbox load error:', error);
-            updateSyncStatus('Failed to load from Dropbox');
+            if (!silent) {
+                updateSyncStatus('Failed to load from Dropbox');
+            }
         }
     }
 }
