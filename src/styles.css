@@ -1430,7 +1430,7 @@ body {
         justify-content: center !important;
     }
 
-    /* VERTICALLY STACKED - Schedule on top, Notes below */
+    /* VERTICALLY STACKED - Notes on top, Schedule below */
     .editor-content {
         display: flex !important;
         flex-direction: column !important;
@@ -1443,11 +1443,11 @@ body {
         overflow: visible !important;
     }
 
-    /* Schedule (right) comes FIRST on mobile */
-    .editor-right {
+    /* Notes (left) comes FIRST on mobile */
+    .editor-left {
         order: 1 !important;
         width: 100% !important;
-        min-height: 700px !important; /* More space for timeline */
+        min-height: 300px !important;
         height: auto !important;
         max-height: none !important;
         padding: 16px !important;
@@ -1456,11 +1456,11 @@ body {
         overflow: visible !important;
     }
 
-    /* Notes (left) comes SECOND on mobile */
-    .editor-left {
+    /* Schedule (right) comes SECOND on mobile */
+    .editor-right {
         order: 2 !important;
         width: 100% !important;
-        min-height: 500px !important;
+        min-height: 700px !important; /* More space for timeline */
         height: auto !important;
         max-height: none !important;
         padding: 16px !important;
