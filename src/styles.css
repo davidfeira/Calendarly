@@ -437,7 +437,7 @@ body {
     background: var(--bg-secondary);
     border: 1px solid var(--border-color);
     border-radius: 4px;
-    font-size: 14px;
+    font-size: 16px;
     font-family: inherit;
     color: var(--text-primary);
     transition: all 0.15s ease;
@@ -693,7 +693,7 @@ body {
     color: var(--text-primary);
     padding: 10px 12px;
     border-radius: 6px;
-    font-size: 14px;
+    font-size: 16px;
     outline: none;
     transition: border-color 0.2s ease;
 }
@@ -827,7 +827,7 @@ body {
     background: var(--bg-secondary);
     border: 1px solid var(--border-color);
     border-radius: 4px;
-    font-size: 13px;
+    font-size: 16px;
     font-family: inherit;
     color: var(--text-primary);
     margin-bottom: 8px;
@@ -1143,7 +1143,7 @@ body {
     border-radius: 0;
     padding: 24px;
     font-family: 'Consolas', 'Monaco', 'Courier New', monospace;
-    font-size: 13px;
+    font-size: 16px;
     line-height: 1.8;
     resize: none;
     white-space: pre;

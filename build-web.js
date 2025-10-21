@@ -8,7 +8,7 @@ if (!fs.existsSync(distDir)) {
 }
 
 // Copy files
-const filesToCopy = ['index.html', 'app.js', 'styles.css', 'oauth-callback.html'];
+const filesToCopy = ['index.html', 'app.js', 'styles.css', 'oauth-callback.html', 'manifest.json', 'icon.png'];
 
 filesToCopy.forEach(file => {
     const srcPath = path.join(__dirname, 'src', file);
